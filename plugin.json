@@ -1,0 +1,56 @@
+{
+    "name": "theater-generator",
+    "version": "1.0.0",
+    "description": "小剧场生成器插件 - 为SillyTavern添加小剧场生成功能",
+    "author": "AI Assistant",
+    "main": "script.js",
+    "license": "MIT",
+    "homepage": "https://github.com/sillytavern/sillytavern",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/sillytavern/sillytavern.git"
+    },
+    "keywords": [
+        "sillytavern",
+        "plugin",
+        "theater",
+        "generator",
+        "roleplay"
+    ],
+    "sillytavern": {
+        "displayName": "小剧场生成器",
+        "description": "在扩展菜单中添加小剧场生成功能，包含剧本、角色、场景、音效四个模块",
+        "icon": "🎭",
+        "category": "generation",
+        "version": "1.0.0",
+        "compatibility": {
+            "minimum": "1.10.0",
+            "tested": "1.11.0"
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

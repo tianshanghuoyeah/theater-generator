@@ -1,0 +1,37 @@
+{
+  "display_name": "小剧场生成器",
+  "loading_order": 1,
+  "requires": [],
+  "optional": [],
+  "js": "theater-generator.js",
+  "css": "theater-generator.css",
+  "author": "AI Assistant",
+  "version": "1.0.0",
+  "homePage": "https://github.com/sillytavern/sillytavern",
+  "auto_update": true
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

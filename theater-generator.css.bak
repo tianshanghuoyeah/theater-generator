@@ -1,0 +1,118 @@
+/* 小剧场生成器扩展样式文件 */
+/* 这个文件包含额外的样式，主要样式已经在 JavaScript 中内联定义 */
+
+/* 扩展按钮样式 - 与其他菜单项保持一致 */
+#theater-generator-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    padding: 8px 12px 8px 8px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+    border: none !important;
+    background: transparent !important;
+    color: inherit !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    border-radius: 4px !important;
+}
+
+#theater-generator-btn:hover {
+    background-color: var(--SmartThemeBorderColor, rgba(0, 0, 0, 0.05)) !important;
+    transform: none !important;
+}
+
+#theater-generator-btn:focus {
+    outline: 2px solid var(--SmartThemeAccent, #007bff) !important;
+    outline-offset: 2px !important;
+}
+
+#theater-generator-btn i {
+    font-size: 16px !important;
+    color: inherit !important;
+}
+
+#theater-generator-btn span {
+    white-space: nowrap !important;
+    color: inherit !important;
+    font-weight: inherit !important;
+}
+
+/* 确保模态框在所有元素之上 */
+.theater-modal {
+    z-index: 999999 !important;
+}
+
+/* 确保内容区域不会被点击穿透 */
+.theater-modal-content {
+    pointer-events: auto;
+}
+
+/* 移动端优化 */
+@media (max-width: 480px) {
+    .theater-modal-content {
+        margin: 10px;
+        max-height: calc(100vh - 20px);
+    }
+}
+
+/* 暗色主题适配 */
+@media (prefers-color-scheme: dark) {
+    .theater-modal-content {
+        background: var(--SmartThemeBodyColor, #2d2d2d);
+        border-color: var(--SmartThemeBorderColor, #404040);
+    }
+    
+    .theater-modal-header h3 {
+        color: var(--SmartThemeBodyTextColor, #ffffff);
+    }
+    
+    .theater-close-btn {
+        color: var(--SmartThemeBodyTextColor, #cccccc);
+    }
+    
+    .theater-close-btn:hover {
+        background-color: var(--SmartThemeBorderColor, #404040);
+        color: var(--SmartThemeBodyTextColor, #ffffff);
+    }
+}
+
+/* 小剧场模块表单样式 - 增加元素间距 */
+.tg-form-group {
+    margin-bottom: 20px !important;
+}
+
+.tg-form-group label {
+    display: block;
+    margin-bottom: 10px !important;
+    font-weight: 600;
+}
+
+.tg-form-group select,
+.tg-form-group textarea,
+.tg-form-group input {
+    margin-top: 8px !important;
+}
+
+.tg-form-actions {
+    margin-top: 25px !important;
+    margin-bottom: 20px !important;
+    display: flex;
+    gap: 12px;
+}
+
+.tg-theater-content,
+.tg-diary-content,
+.tg-wallpaper-content {
+    padding: 20px !important;
+}
+
+.tg-theater-header,
+.tg-diary-header,
+.tg-wallpaper-header {
+    margin-bottom: 20px !important;
+}
+
+
+
