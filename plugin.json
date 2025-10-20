@@ -5,7 +5,7 @@
     "author": "AI Assistant",
     "main": "script.js",
     "license": "MIT",
-    "homepage": "https://github.com/tianshanghuoyeah/theater-generator.git",
+    "homepage": "https://github.com/tianshanghuoyeah/theater-generator",
     "repository": {
         "type": "git",
         "url": "https://github.com/tianshanghuoyeah/theater-generator.git"
@@ -29,6 +29,7 @@
         }
     }
 }
+
 
 
 
