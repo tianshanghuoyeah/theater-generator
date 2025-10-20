@@ -269,7 +269,7 @@
         const safeCount = Number.isFinite(floorCount) ? floorCount : 0;
         return (
             '你是一个小剧场生成创作者，运用HTML 或内联 CSS 来美化和排版小剧场的内容。' +
-            `\n硬性要求：\n- 基于当前聊天上下文创作，不引入无关设定\n- 输出1～4个小剧场片段（若上下文不足则少于4个），每个需独立成块\n- 每个片段使用<section class="mini-theater-card">包裹，包含<h3>标题</h3>、<div class="theater-dialogue">对话</div>，以及可选<div class="theater-direction"><em>舞台指示</em></div>\n- 使用适度的样式增强可读性（粗体、斜体、强调色、分隔线、列表、分镜等），禁止代码围栏与Markdown\n- 结构清晰可扫读，可模仿字幕/分镜/论坛楼层/报告摘要\n- 输出为可直接渲染的HTML片段（不含<html>包装）\n- 参考楼层数：${safeCount}\n`);
+            `\n硬性要求：\n- 每个片段使用<section class="mini-theater-card">包裹\n-题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。\n- 输出为可直接渲染的HTML片段（不含<html>包装）\n- 参考楼层数：${safeCount}\n`);
     }
 
     async function generateTheaterByFloor(floorCount) {
@@ -3886,13 +3886,11 @@ function loadInlineStyles() {
           {
             role: 'system',
             content: `你是一个小剧场生成创作者，运用HTML 或内联 CSS 来美化和排版小剧场的内容：
-— 严格依据聊天上下文与提示进行创作；
+— 参考聊天上下文与提示进行创作；
 — 输出1～${Math.min(4, this.settings.theaterCount || 1)}个小剧场片段（若上下文不足则少于该数），每个片段独立成块；
-— 每个片段使用<section class="mini-theater-card">包裹，包含<h3>标题</h3>、<div class="theater-dialogue">对话</div>，以及可选<div class="theater-direction"><em>舞台指示</em></div>；
-— 使用适度的 HTML/内联 CSS（粗体/斜体/强调色/背景条/边框/列表/分区/分镜等）；
-— 结构清晰可扫读，可模仿字幕、分镜、论坛楼层或报告摘要；
-— 角色不超过${this.settings.characterCount}人，风格为${this.settings.theaterStyle}；
-— 输出为可直接渲染的HTML片段，禁止解释文字与代码围栏。`,
+— 每个片段使用<section class="mini-theater-card">包裹；
+— 风格为${this.settings.theaterStyle}；
+— 输出为可直接渲染的HTML片段，禁止解释文字与HTML代码头部围栏。`,
           },
           { role: 'user', content: prompt },
         ];
@@ -4071,7 +4069,7 @@ function loadInlineStyles() {
                   <div style="display:flex;gap:6px;align-items:center;">
                     <select id="theater-preset" style="flex:1;padding:8px 12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;" onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
                       <option value="">🎨 自定义</option>
-                      <option value="题材不限，发挥想象力，从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择一个，创造对应的可直接渲染的美化小剧场，鼓励增加趣味互动性的点击功能，不输出html等html头部格式">小火默认小剧场预设</option>
+                      <option value="题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。">小火默认小剧场预设</option>
                     </select>
                     <button id="delete-preset" style="padding:8px;background:#ff6b6b;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.2s ease;min-width:36px;" title="删除选中的预设" onmouseover="this.style.background='#ff5252'" onmouseout="this.style.background='#ff6b6b'">🗑️</button>
                   </div>
@@ -4544,7 +4542,7 @@ function loadInlineStyles() {
           .replace(/<meta[^>]*>/gi, '')
           .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
           .replace(/<link[^>]*>/gi, '')
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
         
         // 保留所有style标签，只移除可能影响全局的样式
         cleaned = cleaned.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, styleContent) => {
@@ -4788,7 +4786,7 @@ function loadInlineStyles() {
 
         // 检查是否是内置预设
         const builtinPresets = [
-          '题材不限，发挥想象力，从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择一个，创造对应的可直接渲染的美化小剧场，鼓励增加趣味互动性的点击功能，不输出html等html头部格式'
+          '题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。'
         ];
 
         if (builtinPresets.includes(selectedValue)) {
@@ -4990,7 +4988,7 @@ function loadInlineStyles() {
 7) 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
 
 
-聊天历史（严格依此取材）：
+聊天历史（参考用）：
 ${chatHistory}
 
 用户提示：${userPrompt}
