@@ -269,7 +269,7 @@
         const safeCount = Number.isFinite(floorCount) ? floorCount : 0;
         return (
             '你是一个小剧场生成创作者，运用HTML 或内联 CSS 来美化和排版小剧场的内容。' +
-            `\n硬性要求：\n- 严格依据当前聊天上下文与提示语创作，不引入无关设定\n- 使用适度的样式增强可读性（粗体、斜体、颜色、分隔线、小区块等）\n- 可模仿字幕/分镜/论坛评论/报告摘要等视觉效果\n- 输出为可直接渲染的片段（无需<html>包装）\n- 参考楼层数：${safeCount}\n`);
+            `\n硬性要求：\n- 基于当前聊天上下文创作，不引入无关设定\n- 输出1～4个小剧场片段（若上下文不足则少于4个），每个需独立成块\n- 每个片段使用<section class="mini-theater-card">包裹，包含<h3>标题</h3>、<div class="theater-dialogue">对话</div>，以及可选<div class="theater-direction"><em>舞台指示</em></div>\n- 使用适度的样式增强可读性（粗体、斜体、强调色、分隔线、列表、分镜等），禁止代码围栏与Markdown\n- 结构清晰可扫读，可模仿字幕/分镜/论坛楼层/报告摘要\n- 输出为可直接渲染的HTML片段（不含<html>包装）\n- 参考楼层数：${safeCount}\n`);
     }
 
     async function generateTheaterByFloor(floorCount) {
@@ -320,6 +320,8 @@
         }
 
         // 退化：尝试直接写入 DOM（不推荐，仅兜底）
+        // 注释掉兜底渲染，避免插入透明度预览框
+        /*
         try {
             const chatElem = document.querySelector('#chat') || document.body;
             const div = document.createElement('div');
@@ -329,6 +331,7 @@
         } catch (e) {
             console.error('[小剧场生成器] 兜底渲染失败:', e);
         }
+        */
     }
     function addStyles() {
         if (document.getElementById('theater-generator-styles')) return;
@@ -3884,11 +3887,12 @@ function loadInlineStyles() {
             role: 'system',
             content: `你是一个小剧场生成创作者，运用HTML 或内联 CSS 来美化和排版小剧场的内容：
 — 严格依据聊天上下文与提示进行创作；
+— 输出1～${Math.min(4, this.settings.theaterCount || 1)}个小剧场片段（若上下文不足则少于该数），每个片段独立成块；
+— 每个片段使用<section class="mini-theater-card">包裹，包含<h3>标题</h3>、<div class="theater-dialogue">对话</div>，以及可选<div class="theater-direction"><em>舞台指示</em></div>；
 — 使用适度的 HTML/内联 CSS（粗体/斜体/强调色/背景条/边框/列表/分区/分镜等）；
 — 结构清晰可扫读，可模仿字幕、分镜、论坛楼层或报告摘要；
 — 角色不超过${this.settings.characterCount}人，风格为${this.settings.theaterStyle}；
-— 字数不限；
-— 输出为可直接渲染的 HTML 片段，不要解释文字与代码围栏。`,
+— 输出为可直接渲染的HTML片段，禁止解释文字与代码围栏。`,
           },
           { role: 'user', content: prompt },
         ];
@@ -4280,7 +4284,6 @@ function loadInlineStyles() {
           this.showNotification('开始生成小剧场，如需关闭界面可继续后台生成', 'info');
 
           const count = Math.min(4, Math.max(1, this.settings.theaterCount || 1));
-          const outputs = [];
 
           // 获取聊天历史作为上下文
           const chatHistory = this.getChatHistory();
@@ -4295,8 +4298,11 @@ function loadInlineStyles() {
             total: count,
             prompt: prompt,
             startTime: Date.now(),
-            isForeground: true  // 标记为前台生成
+            isForeground: true,  // 标记为前台生成
+            outputs: []  // 初始化输出数组
           };
+
+          const outputs = this.backgroundGenerationTask.outputs;
 
           for (let i = 0; i < count; i++) {
             // 检查是否已切换到后台模式
@@ -4373,7 +4379,9 @@ function loadInlineStyles() {
           // 同步插入到聊天（系统消息）
           try {
             if (typeof addTheaterMessage === 'function' && outputs.length > 0) {
-              await addTheaterMessage(outputs[0].trim());
+              for (let i = 0; i < outputs.length; i++) {
+                await addTheaterMessage(outputs[i].trim());
+              }
             }
           } catch (insertErr) {
             console.warn('[Theater Module] 插入聊天失败（已忽略）：', insertErr);
@@ -4418,7 +4426,8 @@ function loadInlineStyles() {
           const prompt = task.prompt;
           const count = task.total;
           const currentProgress = task.progress;
-          const outputs = [];
+          // 保留之前已生成的内容，而不是重新初始化
+          const outputs = task.outputs || [];
 
           console.log('[Theater Module] 继续后台生成任务，当前进度:', currentProgress, '/', count);
 
@@ -4486,7 +4495,9 @@ function loadInlineStyles() {
           // 同步插入到聊天（系统消息）
           try {
             if (typeof addTheaterMessage === 'function' && outputs.length > 0) {
-              await addTheaterMessage(outputs[0].trim());
+              for (let i = 0; i < outputs.length; i++) {
+                await addTheaterMessage(outputs[i].trim());
+              }
             }
           } catch (insertErr) {
             console.warn('[Theater Module] 插入聊天失败（已忽略）：', insertErr);
@@ -4518,20 +4529,175 @@ function loadInlineStyles() {
         }
       }
 
+      // 清理HTML内容，保留所有美化样式但不影响全局
+      cleanHTMLContent(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return '';
+        
+        // 移除完整的HTML文档标签，但保留所有样式相关标签
+        let cleaned = htmlContent
+          .replace(/<html[^>]*>/gi, '')
+          .replace(/<\/html>/gi, '')
+          .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+          .replace(/<body[^>]*>/gi, '')
+          .replace(/<\/body>/gi, '')
+          .replace(/<!DOCTYPE[^>]*>/gi, '')
+          .replace(/<meta[^>]*>/gi, '')
+          .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
+          .replace(/<link[^>]*>/gi, '')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+        
+        // 保留所有style标签，只移除可能影响全局的样式
+        cleaned = cleaned.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, styleContent) => {
+          // 只移除可能影响全局布局的样式，保留所有美化样式
+          const filteredStyle = styleContent
+            .replace(/body\s*\{[^}]*\}/gi, '')
+            .replace(/html\s*\{[^}]*\}/gi, '')
+            .replace(/margin\s*:\s*0\s*!important/gi, '')
+            .replace(/padding\s*:\s*0\s*!important/gi, '')
+            .replace(/position\s*:\s*fixed/gi, 'position: relative')
+            .replace(/z-index\s*:\s*\d+/gi, 'z-index: 1');
+          return `<style>${filteredStyle}</style>`;
+        });
+        
+        // 确保样式被正确应用，添加样式隔离
+        if (cleaned.includes('<style>') || cleaned.includes('style=')) {
+          // 如果包含样式，确保样式被正确应用
+          console.log('[Theater Module] 检测到样式内容，确保样式正确应用');
+        }
+        
+        // 清理多余的空白字符
+        cleaned = cleaned.trim();
+        
+        return cleaned;
+      }
+
+      // 将CSS内容作用域到指定容器类，避免影响全局
+      scopeCSS(cssText, scopeClass) {
+        try {
+          if (!cssText || !scopeClass) return cssText || '';
+          const scoped = [];
+          // 简单的规则拆分：按 '}' 分块再还原
+          const blocks = cssText.split('}');
+          for (let raw of blocks) {
+            raw = raw.trim();
+            if (!raw) continue;
+            const parts = raw.split('{');
+            if (parts.length < 2) continue;
+            const selectorPart = parts[0].trim();
+            const bodyPart = parts.slice(1).join('{').trim();
+
+            // 跳过或保留@规则（如 @keyframes, @font-face 等）
+            if (selectorPart.startsWith('@')) {
+              scoped.push(selectorPart + ' {' + bodyPart + '}');
+              continue;
+            }
+
+            // 处理多个选择器
+            const selectors = selectorPart.split(',').map(s => s.trim()).filter(Boolean).map(sel => {
+              // 将全局 body/html 选择器替换为作用域容器
+              if (sel === 'body' || sel.startsWith('body ')) sel = sel.replace(/^body\b/, '.' + scopeClass);
+              if (sel === 'html' || sel.startsWith('html ')) sel = sel.replace(/^html\b/, '.' + scopeClass);
+              // 将 :root 转为容器本身
+              if (sel === ':root' || sel.startsWith(':root')) sel = sel.replace(/^:root\b/, '.' + scopeClass);
+              // 已经包含作用域类则不再重复添加
+              if (sel.startsWith('.' + scopeClass)) return sel;
+              return '.' + scopeClass + ' ' + sel;
+            });
+
+            scoped.push(selectors.join(', ') + ' {' + bodyPart + '}');
+          }
+          return scoped.join('\n');
+        } catch (_) {
+          return cssText;
+        }
+      }
+
+      // 对HTML中的<style>内容进行作用域处理，并返回包裹后的HTML
+      applyScopeToHTML(htmlContent, scopeClass) {
+        if (!htmlContent || !scopeClass) return { html: htmlContent };
+        try {
+          const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+          let match;
+          let output = '';
+          let lastIndex = 0;
+          while ((match = styleRegex.exec(htmlContent)) !== null) {
+            output += htmlContent.slice(lastIndex, match.index);
+            const fullTag = match[0];
+            const cssInside = match[1] || '';
+            const scopedCSS = this.scopeCSS(cssInside, scopeClass);
+            output += fullTag.replace(cssInside, scopedCSS);
+            lastIndex = match.index + fullTag.length;
+          }
+          output += htmlContent.slice(lastIndex);
+          // 包裹一层作用域容器
+          const wrapped = `<div class="${scopeClass}">` + output + `</div>`;
+          return { html: wrapped };
+        } catch (_) {
+          return { html: `<div class="${scopeClass}">` + htmlContent + `</div>` };
+        }
+      }
+
       // 渲染多预览容器并应用分页显示
       renderPreviews(outputs) {
         const container = document.getElementById('theater-previews');
         const indicator = document.getElementById('theater-page-indicator');
         const total = Math.min(4, Math.max(1, this.settings.theaterCount || 1));
         if (!container) return;
-        container.innerHTML = '';
+        
+        // ✅ 不清空容器，只更新内容，保留已有样式
         for (let i = 0; i < total; i++) {
-          const div = document.createElement('div');
-          div.id = `theater-html-preview-${i}`;
-          div.className = 'preview-container';
-          div.style.cssText = 'border:1px solid #ddd;border-radius:8px;min-height:400px;max-height:70vh;overflow:auto;padding:12px;background:#fafafa;position:relative;display:none;';
-          div.innerHTML = (outputs && outputs[i]) ? outputs[i] : '';
-          container.appendChild(div);
+          let div = document.getElementById(`theater-html-preview-${i}`);
+          if (!div) {
+            // 如果不存在，创建新的预览容器
+            div = document.createElement('div');
+            div.id = `theater-html-preview-${i}`;
+            div.className = 'preview-container';
+            div.style.cssText = 'border:1px solid #ddd;border-radius:8px;min-height:400px;max-height:70vh;overflow:auto;padding:12px;background:#fafafa;position:relative;display:none;';
+            container.appendChild(div);
+          }
+          
+        // ✅ 清理HTML内容
+        const cleanedOutput = (outputs && outputs[i]) ? this.cleanHTMLContent(outputs[i]) : '';
+        // ✅ 为每个预览生成独立作用域类并应用样式作用域
+        const scopeClass = `tg-scope-${i}`;
+        const scoped = this.applyScopeToHTML(cleanedOutput, scopeClass);
+        div.innerHTML = scoped.html;
+          
+          // 设置图片跨域属性以避免CORS污染
+          this.setImagesCrossOrigin(div);
+          
+          // ✅ 确保样式正确应用 - 强制重新计算样式
+          setTimeout(() => {
+            const previewElement = document.getElementById(`theater-html-preview-${i}`);
+            if (previewElement) {
+              // 强制重新计算样式
+              previewElement.style.transform = 'translateZ(0)';
+              previewElement.style.willChange = 'transform';
+              // 触发重绘
+              previewElement.offsetHeight;
+              
+              // 确保样式被正确应用
+              const styleElements = previewElement.querySelectorAll('style');
+              if (styleElements.length > 0) {
+                console.log(`[Theater Module] 预览 ${i} 包含 ${styleElements.length} 个样式标签`);
+                // 强制重新应用样式
+                styleElements.forEach(styleEl => {
+                  styleEl.textContent = styleEl.textContent;
+                });
+              }
+              
+              // ✅ 额外确保样式应用 - 重新设置innerHTML
+              if (scoped && scoped.html && scoped.html.includes('<style')) {
+                console.log(`[Theater Module] 预览 ${i} 包含样式，重新应用`);
+                // 重新设置内容以确保样式生效
+                const currentContent = previewElement.innerHTML;
+                previewElement.innerHTML = '';
+                setTimeout(() => {
+                  previewElement.innerHTML = currentContent;
+                }, 50);
+              }
+            }
+          }, 100);
         }
         // 保证索引有效
         if (this.currentPreviewIndex >= total) this.currentPreviewIndex = total - 1;
