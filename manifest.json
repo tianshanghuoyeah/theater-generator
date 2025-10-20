@@ -6,10 +6,11 @@
   "js": "theater-generator.js",
   "css": "theater-generator.css",
   "author": "AI Assistant",
-  "version": "1.0.0",
-  "homePage": "https://github.com/sillytavern/sillytavern",
+  "version": "1.0.2",
+  "homePage": "https://github.com/tianshanghuoyeah/theater-generator",
   "auto_update": true
 }
+
 
 
 
