@@ -6,10 +6,11 @@
   "js": "theater-generator.js",
   "css": "theater-generator.css",
   "author": "AI Assistant",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "homePage": "https://github.com/tianshanghuoyeah/theater-generator.git",
   "auto_update": true
 }
+
 
 
 
