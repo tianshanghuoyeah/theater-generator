@@ -265,15 +265,62 @@
         }
     }
 
-    function buildPromptByFloor(floorCount) {
+    async function buildPromptByFloor(floorCount) {
         const safeCount = Number.isFinite(floorCount) ? floorCount : 0;
+        
+        // 获取增强的上下文信息
+        let contextInfo = '';
+        try {
+            if (window.TavernHelper) {
+                const charData = window.TavernHelper.getCharData('current');
+                if (charData) {
+                    contextInfo += '\n=== 角色人设 ===\n';
+                    if (charData.name) contextInfo += `角色: ${charData.name}\n`;
+                    if (charData.description) contextInfo += `描述: ${charData.description}\n`;
+                    if (charData.personality) contextInfo += `性格: ${charData.personality}\n`;
+                    if (charData.scenario) contextInfo += `背景: ${charData.scenario}\n`;
+                    
+                    // 获取世界书
+                    const charWorldbooks = window.TavernHelper.getCharWorldbookNames('current');
+                    if (charWorldbooks?.primary) {
+                        try {
+                            const worldbook = await window.TavernHelper.getWorldbook(charWorldbooks.primary);
+                            if (worldbook && worldbook.length > 0) {
+                                contextInfo += '\n=== 世界观设定 ===\n';
+                                worldbook.forEach(entry => {
+                                    if (entry.enabled && entry.content) {
+                                        contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            console.warn('[小剧场生成器] 获取世界书失败:', e);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[小剧场生成器] 获取上下文失败:', e);
+        }
+        
         return (
             '你是一个小剧场生成创作者，运用HTML 或内联 CSS 来美化和排版小剧场的内容。' +
-            `\n硬性要求：\n- 每个片段使用<section class="mini-theater-card">包裹\n-题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。\n- 输出为可直接渲染的HTML片段（不含<html>包装）\n- 参考楼层数：${safeCount}\n`);
+            '\n硬性要求：\n- 每个片段使用<section class="mini-theater-card">包裹\n' +
+            '- 题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择\n' +
+            '- 用小红书、论坛、朋友圈、聊天、帖子、b站、书信、知乎、抖音等多种趣味形式\n' +
+            '- 创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能\n' +
+            '- 输出为可直接渲染的HTML片段（不含<html>包装）\n' +
+            `- 参考楼层数：${safeCount}\n` +
+            '\n重要创作指引：\n' +
+            '- 请深入理解角色的性格、背景、世界观设定，不要只参考最近的消息\n' +
+            '- 融合角色人设和世界观，创作有深度、有新意的内容\n' +
+            '- 避免简单照抄聊天记录，要有创新性的演绎\n' +
+            (contextInfo ? '\n' + contextInfo + '\n' : '')
+        );
     }
 
     async function generateTheaterByFloor(floorCount) {
-        const prompt = buildPromptByFloor(floorCount);
+        const prompt = await buildPromptByFloor(floorCount);
         try {
             // 优先使用 SillyTavern.generate（与当前预设一致）
             if (window.SillyTavern && typeof window.SillyTavern.generate === 'function') {
@@ -390,6 +437,12 @@
                 padding: 0 !important;
                 margin: 0 !important;
                 box-sizing: border-box !important;
+            }
+
+            /* 拖动时覆盖居中样式 */
+            .theater-modal.dragging {
+                justify-content: flex-start !important;
+                align-items: flex-start !important;
             }
 
             .theater-modal-overlay {
@@ -909,7 +962,7 @@
             <div id="theater-generator-modal" class="theater-modal">
                 <div class="theater-modal-overlay"></div>
                 <div class="theater-modal-content">
-                    <div class="theater-modal-header">
+                    <div class="theater-modal-header" id="theater-generator-header" style="cursor: move; user-select: none;">
                         <h3>🎭 小剧场生成器</h3>
                         <button class="theater-close-btn" id="theater-close-btn">&times;</button>
                     </div>
@@ -970,6 +1023,13 @@
             window.wallpaperModule.applyModalSize();
           }, 100);
         }
+        
+        // 🔑 关键修复：显示前预设位置
+        const modal = document.getElementById('theater-generator-modal');
+        if (modal) {
+          modal.style.display = 'block';
+          window.GlobalModalPosition.applyToAllModals();
+        }
     }
 
     function bindModalEvents() {
@@ -989,12 +1049,7 @@
         // 点击模态框背景
         const modal = document.getElementById('theater-generator-modal');
         if (modal) {
-            modal.onclick = function(e) {
-                if (e.target.id === 'theater-generator-modal' || e.target.classList.contains('theater-modal-overlay')) {
-                    console.log('[小剧场生成器] 背景被点击');
-                    closeTheaterGenerator();
-                }
-            };
+            // 背景点击关闭功能已移除
         }
 
         // 功能按钮点击
@@ -1008,6 +1063,14 @@
                 handleFunctionClick(functionType, this);
             };
         });
+
+        // 🔑 关键修复：为主界面模态框启用拖动功能
+        if (window.enableModalDrag) {
+            window.enableModalDrag('theater-generator-modal', 'theater-generator-header');
+            console.log('[小剧场生成器] ✅ 已为主界面启用拖动功能');
+        } else {
+            console.warn('[小剧场生成器] ⚠️ enableModalDrag 函数不存在');
+        }
 
         // ESC键关闭
         document.addEventListener('keydown', function(e) {
@@ -1116,9 +1179,9 @@
         modal.innerHTML = `
             <div class="theater-modal-overlay"></div>
             <div class="theater-modal-content" style="height: 600px; max-height: 80vh; overflow-y: auto;">
-                <div class="theater-modal-header">
+                <div class="theater-modal-header" id="chat-module-header" style="cursor: move; user-select: none;">
                     <button class="theater-back-btn" id="chat-module-back-btn">← 返回</button>
-                    <h3>🔥小剧场生成器</h3>
+                    <h3>🔥 小火聊天</h3>
                     <button class="theater-close-btn" id="chat-module-close-btn">&times;</button>
                 </div>
                 <div class="theater-modal-body" style="width: 100%; overflow-y: auto; flex: 1;">
@@ -1161,6 +1224,13 @@
             window.wallpaperModule.applyModalSize();
           }, 100);
         }
+        
+        // 🔑 关键修复：显示前预设位置
+        const chatModal = document.getElementById('chat-module-modal');
+        if (chatModal) {
+          chatModal.style.display = 'block';
+          window.GlobalModalPosition.applyToAllModals();
+        }
     }
 
     // 显示日记模块模态框
@@ -1171,7 +1241,7 @@
             <div id="diary-module-modal" class="theater-modal">
                 <div class="theater-modal-overlay"></div>
                 <div class="theater-modal-content" style="height: 600px; max-height: 80vh; overflow-y: auto;">
-                    <div class="theater-modal-header">
+                    <div class="theater-modal-header" id="diary-modal-header" style="cursor: move; user-select: none;">
                         <button class="theater-back-btn" id="diary-module-back-btn">← 返回</button>
                         <h3>📝 日记生成</h3>
                         <button class="theater-close-btn" id="diary-module-close-btn">&times;</button>
@@ -1216,6 +1286,13 @@
             window.wallpaperModule.applyModalSize();
           }, 100);
         }
+        
+        // 🔑 关键修复：显示前预设位置
+        const diaryModal = document.getElementById('diary-module-modal');
+        if (diaryModal) {
+          diaryModal.style.display = 'block';
+          window.GlobalModalPosition.applyToAllModals();
+        }
     }
 
     // 显示小剧场模块模态框
@@ -1226,7 +1303,7 @@
             <div id="theater-module-modal" class="theater-modal">
                 <div class="theater-modal-overlay"></div>
                 <div class="theater-modal-content" style="height: 600px; max-height: 80vh; overflow-y: auto;">
-                    <div class="theater-modal-header">
+                    <div class="theater-modal-header" id="theater-modal-header" style="cursor: move; user-select: none;">
                         <button class="theater-back-btn" id="theater-module-back-btn">← 返回</button>
                         <h3>🎭 小剧场生成</h3>
                         <button class="theater-close-btn" id="theater-module-close-btn">&times;</button>
@@ -1271,6 +1348,13 @@
             window.wallpaperModule.applyModalSize();
           }, 100);
         }
+        
+        // 🔑 关键修复：显示前预设位置
+        const modal = document.getElementById('theater-module-modal');
+        if (modal) {
+          modal.style.display = 'block';
+          window.GlobalModalPosition.applyToAllModals();
+        }
     }
 
 
@@ -1282,7 +1366,7 @@
             <div id="wallpaper-module-modal" class="theater-modal">
                 <div class="theater-modal-overlay"></div>
                 <div class="theater-modal-content" style="height: 600px; max-height: 80vh; overflow-y: auto;">
-                    <div class="theater-modal-header">
+                    <div class="theater-modal-header" id="wallpaper-modal-header" style="cursor: move; user-select: none;">
                         <button class="theater-back-btn" id="wallpaper-module-back-btn">← 返回</button>
                         <h3>🖼️ 壁纸设置</h3>
                         <button class="theater-close-btn" id="wallpaper-module-close-btn">&times;</button>
@@ -1326,6 +1410,13 @@
           setTimeout(() => {
             window.wallpaperModule.applyModalSize();
           }, 100);
+        }
+        
+        // 🔑 关键修复：显示前预设位置
+        const modal = document.getElementById('wallpaper-module-modal');
+        if (modal) {
+          modal.style.display = 'block';
+          window.GlobalModalPosition.applyToAllModals();
         }
     }
 
@@ -1592,11 +1683,15 @@
         // 点击模态框背景关闭
         const modal = document.getElementById('chat-module-modal');
         if (modal) {
-            modal.onclick = function(e) {
-                if (e.target.id === 'chat-module-modal' || e.target.classList.contains('theater-modal-overlay')) {
-                    closeChatModuleModal();
-                }
-            };
+            // 背景点击关闭功能已移除
+        }
+
+        // 🔑 关键修复：为聊天模块启用拖动功能
+        if (window.enableModalDrag) {
+            window.enableModalDrag('chat-module-modal', 'chat-module-header');
+            console.log('[聊天模块] ✅ 已启用拖动功能');
+        } else {
+            console.warn('[聊天模块] ⚠️ enableModalDrag 函数不存在');
         }
     }
 
@@ -1624,11 +1719,15 @@
         // 点击模态框背景
         const modal = document.getElementById('diary-module-modal');
         if (modal) {
-            modal.onclick = function(e) {
-                if (e.target.id === 'diary-module-modal' || e.target.classList.contains('theater-modal-overlay')) {
-                    closeDiaryModuleModal();
-                }
-            };
+            // 背景点击关闭功能已移除
+        }
+
+        // 🔑 关键修复：为日记模块启用拖动功能
+        if (window.enableModalDrag) {
+            window.enableModalDrag('diary-module-modal', 'diary-modal-header');
+            console.log('[日记模块] ✅ 已启用拖动功能');
+        } else {
+            console.warn('[日记模块] ⚠️ enableModalDrag 函数不存在');
         }
     }
 
@@ -1656,11 +1755,15 @@
         // 点击模态框背景
         const modal = document.getElementById('theater-module-modal');
         if (modal) {
-            modal.onclick = function(e) {
-                if (e.target.id === 'theater-module-modal' || e.target.classList.contains('theater-modal-overlay')) {
-                    closeTheaterModuleModal();
-                }
-            };
+            // 背景点击关闭功能已移除
+        }
+
+        // 🔑 关键修复：为小剧场模块启用拖动功能
+        if (window.enableModalDrag) {
+            window.enableModalDrag('theater-module-modal', 'theater-modal-header');
+            console.log('[小剧场模块] ✅ 已启用拖动功能');
+        } else {
+            console.warn('[小剧场模块] ⚠️ enableModalDrag 函数不存在');
         }
     }
 
@@ -1689,11 +1792,15 @@
         // 点击模态框背景
         const modal = document.getElementById('wallpaper-module-modal');
         if (modal) {
-            modal.onclick = function(e) {
-                if (e.target.id === 'wallpaper-module-modal' || e.target.classList.contains('theater-modal-overlay')) {
-                    closeWallpaperModuleModal();
-                }
-            };
+            // 背景点击关闭功能已移除
+        }
+
+        // 🔑 关键修复：为壁纸模块启用拖动功能
+        if (window.enableModalDrag) {
+            window.enableModalDrag('wallpaper-module-modal', 'wallpaper-modal-header');
+            console.log('[壁纸模块] ✅ 已启用拖动功能');
+        } else {
+            console.warn('[壁纸模块] ⚠️ enableModalDrag 函数不存在');
         }
     }
 
@@ -1824,7 +1931,7 @@
             <div id="api-settings-modal" class="theater-modal">
                 <div class="theater-modal-overlay"></div>
                 <div class="theater-modal-content" style="height: 550px; max-height: 80vh; overflow-y: auto;">
-                    <div class="theater-modal-header">
+                    <div class="theater-modal-header" id="api-modal-header" style="cursor: move; user-select: none;">
                         <button class="theater-back-btn" id="api-back-btn">← 返回</button>
                         <h3>⚙️ API设置</h3>
                         <button class="theater-close-btn" id="api-close-btn">&times;</button>
@@ -1870,16 +1977,7 @@
           }, 100);
         }
         
-        // 绑定返回按钮事件
-        const backBtn = document.getElementById('api-back-btn');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                closeAPISettingsModal();
-                openTheaterGenerator(); // 返回到主界面
-            });
-        }
-        
-        // 显示提示信息
+        // 🔑 关键修复：显示前预设位置
         setTimeout(() => {
             const settings = loadAPISettings();
             if (settings.model) {
@@ -1900,6 +1998,13 @@
                 refreshModels();
             }
         }, 500);
+        
+        // 🔑 关键修复：显示前预设位置
+        const modal = document.getElementById('api-settings-modal');
+        if (modal) {
+          modal.style.display = 'block';
+          window.GlobalModalPosition.applyToAllModals();
+        }
     }
     function loadAPISettingsContent() {
         const contentDiv = document.getElementById('api-settings-content');
@@ -2024,14 +2129,19 @@
             };
         }
 
+        // 返回按钮
+        const backBtn = document.getElementById('api-back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                closeAPISettingsModal();
+                openTheaterGenerator(); // 返回到主界面
+            });
+        }
+
         // 点击模态框背景
         const modal = document.getElementById('api-settings-modal');
         if (modal) {
-            modal.onclick = function(e) {
-                if (e.target.id === 'api-settings-modal' || e.target.classList.contains('theater-modal-overlay')) {
-                    closeAPISettingsModal();
-                }
-            };
+            // 背景点击关闭功能已移除
         }
 
         // 服务商选择变化
@@ -2169,6 +2279,14 @@
         // 重新触发服务商变化逻辑
         onProviderChange(settings.provider);
         console.log('[API设置] ✅ UI字段填充完成');
+
+        // 🔑 关键修复：为API设置模块启用拖动功能
+        if (window.enableModalDrag) {
+            window.enableModalDrag('api-settings-modal', 'api-modal-header');
+            console.log('[API设置] ✅ 已启用拖动功能');
+        } else {
+            console.warn('[API设置] ⚠️ enableModalDrag 函数不存在');
+        }
     }
 
     /**
@@ -4067,10 +4185,14 @@ function loadInlineStyles() {
                 <div class="tg-form-group">
                   <label for="theater-preset" style="font-weight:500;color:#333;margin-bottom:6px;display:block;">📝 提示词预设模版</label>
                   <div style="display:flex;gap:6px;align-items:center;">
-                    <select id="theater-preset" style="flex:1;padding:8px 12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;" onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
-                      <option value="">🎨 自定义</option>
-                      <option value="题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。">小火默认小剧场预设</option>
-                    </select>
+                    <div style="flex:1;position:relative;">
+                      <select id="theater-preset" style="width:100%;padding:8px 12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;" onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
+                        <option value="">🔍 搜索预设...</option>
+                        <option value="">🎨 自定义</option>
+                        <option value="题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。">小火默认小剧场预设</option>
+                        ${customPresetOptions}
+                      </select>
+                    </div>
                     <button id="delete-preset" style="padding:8px;background:#ff6b6b;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.2s ease;min-width:36px;" title="删除选中的预设" onmouseover="this.style.background='#ff5252'" onmouseout="this.style.background='#ff6b6b'">🗑️</button>
                   </div>
                 </div>
@@ -4126,12 +4248,23 @@ function loadInlineStyles() {
       // 绑定事件
       bindEvents() {
 
-
-        // 预设模版选择
+        // ✅ 预设模版搜索功能
         const presetSelect = document.getElementById('theater-preset');
+        
         if (presetSelect) {
           presetSelect.addEventListener('change', e => {
             const val = e.target.value || '';
+            
+            // 如果选择的是搜索选项，显示搜索框
+            if (val === '') {
+              const searchOption = e.target.querySelector('option[value=""]');
+              if (searchOption && searchOption.textContent.includes('🔍')) {
+                // 显示搜索框
+                this.showPresetSearchModal('theater');
+                return;
+              }
+            }
+            
             if (val) {
               const ta = document.getElementById('theater-prompt');
               if (ta) {
@@ -4144,6 +4277,7 @@ function loadInlineStyles() {
               this.saveSettings();
             }
           });
+          
           // 恢复已选预设
           if (this.settings.selectedPreset) {
             presetSelect.value = this.settings.selectedPreset;
@@ -4154,6 +4288,7 @@ function loadInlineStyles() {
             }
           }
         }
+
 
         // 生成数量变更
         const countSelect = document.getElementById('theater-count');
@@ -4284,7 +4419,7 @@ function loadInlineStyles() {
           const count = Math.min(4, Math.max(1, this.settings.theaterCount || 1));
 
           // 获取聊天历史作为上下文
-          const chatHistory = this.getChatHistory();
+          const chatHistory = await this.getChatHistory();
           
           // 构建完整的提示词
           const fullPrompt = this.buildTheaterPrompt(prompt, chatHistory);
@@ -4303,49 +4438,103 @@ function loadInlineStyles() {
           const outputs = this.backgroundGenerationTask.outputs;
 
           for (let i = 0; i < count; i++) {
-            // 检查是否已切换到后台模式
-            if (this.backgroundGenerationTask && !this.backgroundGenerationTask.isForeground) {
-              console.log('[Theater Module] 检测到界面已关闭，切换到后台生成模式');
-              // 调用后台生成方法继续生成
-              await this.generateTheaterBackground();
-              return;
-            }
-
-            // 更新进度显示
-            generateBtn.textContent = `生成中... 小剧场${i + 1}/${count}`;
-            
-            // 更新任务进度
-            this.backgroundGenerationTask.progress = i + 1;
-            
-            // 显示进度提示
-            this.showNotification(`正在生成第${i + 1}个小剧场...`, 'info');
-            
-            let theaterContent = '';
-            // 先本地兜底
-            const local = this.generateLocalTheater(prompt, chatHistory);
-            theaterContent = local && local.trim() ? local : '';
-            // API增强
-            if (this.isAPIAvailable()) {
-              try {
-                const apiResult = await this.callTheaterAPI(fullPrompt);
-                if (apiResult && apiResult.trim()) {
-                  theaterContent = apiResult;
-                }
-              } catch (apiError) {
-                console.warn('[Theater Module] API调用失败（第', i + 1, '个），使用本地内容:', apiError);
+            try {
+              // 检查是否已切换到后台模式
+              if (this.backgroundGenerationTask && !this.backgroundGenerationTask.isForeground) {
+                console.log('[Theater Module] 检测到界面已关闭，切换到后台生成模式');
+                // 调用后台生成方法继续生成
+                await this.generateTheaterBackground();
+                return;
               }
+
+              // 更新进度显示
+              generateBtn.textContent = `生成中... 小剧场${i + 1}/${count}`;
+              
+              // 更新任务进度
+              this.backgroundGenerationTask.progress = i + 1;
+              
+              // 显示进度提示
+              this.showNotification(`正在生成第${i + 1}个小剧场...`, 'info');
+              
+              let theaterContent = '';
+              let generationSuccess = false;
+              
+              // 策略1: 尝试API生成
+              if (this.isAPIAvailable()) {
+                try {
+                  console.log(`[Theater Module] 尝试API生成第${i + 1}个小剧场`);
+                  const apiResult = await this.callTheaterAPI(fullPrompt);
+                  if (apiResult && apiResult.trim()) {
+                    theaterContent = apiResult;
+                    generationSuccess = true;
+                    console.log(`[Theater Module] API生成第${i + 1}个小剧场成功`);
+                  }
+                } catch (apiError) {
+                  console.warn(`[Theater Module] API生成第${i + 1}个小剧场失败:`, apiError);
+                }
+              }
+              
+              // 策略2: 尝试 SillyTavern 内置生成
+              if (!generationSuccess && window.SillyTavern && typeof window.SillyTavern.generate === 'function') {
+                try {
+                  console.log(`[Theater Module] 尝试 SillyTavern 生成第${i + 1}个小剧场`);
+                  const sillyResult = await window.SillyTavern.generate({
+                    user_input: fullPrompt,
+                    should_stream: false,
+                    max_chat_history: 'all',
+                  });
+                  if (sillyResult && sillyResult.trim()) {
+                    theaterContent = sillyResult;
+                    generationSuccess = true;
+                    console.log(`[Theater Module] SillyTavern 生成第${i + 1}个小剧场成功`);
+                  }
+                } catch (sillyError) {
+                  console.warn(`[Theater Module] SillyTavern 生成第${i + 1}个小剧场失败:`, sillyError);
+                }
+              }
+              
+              // 策略3: 使用本地生成器
+              if (!generationSuccess) {
+                console.log(`[Theater Module] 使用本地生成器生成第${i + 1}个小剧场`);
+                const localResult = this.generateLocalTheater(prompt, chatHistory);
+                if (localResult && localResult.trim()) {
+                  theaterContent = localResult;
+                  generationSuccess = true;
+                  console.log(`[Theater Module] 本地生成第${i + 1}个小剧场成功`);
+                }
+              }
+              
+              // 处理生成结果
+              if (generationSuccess && theaterContent) {
+                // 去围栏
+                let stripped = theaterContent
+                  .replace(/^```html\s*/i, '')
+                  .replace(/```\s*$/i, '')
+                  .trim();
+                
+                // 最终HTML处理
+                const htmlTheater = this.generateHTMLTheater(stripped);
+                const finalContent = htmlTheater || stripped || '';
+                
+                if (finalContent.trim()) {
+                  outputs.push(finalContent);
+                  console.log(`[Theater Module] 第${i + 1}个小剧场生成完成，长度: ${finalContent.length}`);
+                } else {
+                  console.warn(`[Theater Module] 第${i + 1}个小剧场内容为空，跳过`);
+                  // 添加一个默认内容，避免完全失败
+                  outputs.push(`<section class="mini-theater-card"><div style="padding: 20px; text-align: center; color: #666;">第${i + 1}个小剧场生成中...</div></section>`);
+                }
+              } else {
+                console.error(`[Theater Module] 第${i + 1}个小剧场生成完全失败`);
+                // 添加一个默认内容，避免完全失败
+                outputs.push(`<section class="mini-theater-card"><div style="padding: 20px; text-align: center; color: #666;">第${i + 1}个小剧场生成失败</div></section>`);
+              }
+              
+            } catch (error) {
+              console.error(`[Theater Module] 生成第${i + 1}个小剧场时发生异常:`, error);
+              // 添加一个默认内容，避免完全失败
+              outputs.push(`<section class="mini-theater-card"><div style="padding: 20px; text-align: center; color: #666;">第${i + 1}个小剧场生成异常</div></section>`);
             }
-            // 去围栏
-            let stripped = (theaterContent || '')
-              .replace(/^```html\s*/i, '')
-              .replace(/```\s*$/i, '')
-              .trim();
-            if (!stripped) {
-              stripped = this.generateLocalTheater(prompt, chatHistory).trim();
-            }
-            // 最终HTML
-            const htmlTheater = this.generateHTMLTheater(stripped);
-            outputs.push(htmlTheater || stripped || '');
           }
 
           // 标记任务完成
@@ -4430,45 +4619,99 @@ function loadInlineStyles() {
           console.log('[Theater Module] 继续后台生成任务，当前进度:', currentProgress, '/', count);
 
           // 获取聊天历史作为上下文
-          const chatHistory = this.getChatHistory();
+          const chatHistory = await this.getChatHistory();
           
           // 构建完整的提示词
           const fullPrompt = this.buildTheaterPrompt(prompt, chatHistory);
 
           // 从当前进度继续生成
           for (let i = currentProgress; i < count; i++) {
-            // 更新后台任务进度
-            this.backgroundGenerationTask.progress = i + 1;
-            
-            // 更新按钮进度显示（如果界面还开着）
-            this.updateGenerationProgress();
-            
-            let theaterContent = '';
-            // 先本地兜底
-            const local = this.generateLocalTheater(prompt, chatHistory);
-            theaterContent = local && local.trim() ? local : '';
-            // API增强
-            if (this.isAPIAvailable()) {
-              try {
-                const apiResult = await this.callTheaterAPI(fullPrompt);
-                if (apiResult && apiResult.trim()) {
-                  theaterContent = apiResult;
+            try {
+              // 更新后台任务进度
+              this.backgroundGenerationTask.progress = i + 1;
+              
+              // 更新按钮进度显示（如果界面还开着）
+              this.updateGenerationProgress();
+              
+              let theaterContent = '';
+              let generationSuccess = false;
+              
+              // 策略1: 尝试API生成
+              if (this.isAPIAvailable()) {
+                try {
+                  console.log(`[Theater Module] 后台尝试API生成第${i + 1}个小剧场`);
+                  const apiResult = await this.callTheaterAPI(fullPrompt);
+                  if (apiResult && apiResult.trim()) {
+                    theaterContent = apiResult;
+                    generationSuccess = true;
+                    console.log(`[Theater Module] 后台API生成第${i + 1}个小剧场成功`);
+                  }
+                } catch (apiError) {
+                  console.warn(`[Theater Module] 后台API生成第${i + 1}个小剧场失败:`, apiError);
                 }
-              } catch (apiError) {
-                console.warn('[Theater Module] API调用失败（第', i + 1, '个），使用本地内容:', apiError);
               }
+              
+              // 策略2: 尝试 SillyTavern 内置生成
+              if (!generationSuccess && window.SillyTavern && typeof window.SillyTavern.generate === 'function') {
+                try {
+                  console.log(`[Theater Module] 后台尝试 SillyTavern 生成第${i + 1}个小剧场`);
+                  const sillyResult = await window.SillyTavern.generate({
+                    user_input: fullPrompt,
+                    should_stream: false,
+                    max_chat_history: 'all',
+                  });
+                  if (sillyResult && sillyResult.trim()) {
+                    theaterContent = sillyResult;
+                    generationSuccess = true;
+                    console.log(`[Theater Module] 后台 SillyTavern 生成第${i + 1}个小剧场成功`);
+                  }
+                } catch (sillyError) {
+                  console.warn(`[Theater Module] 后台 SillyTavern 生成第${i + 1}个小剧场失败:`, sillyError);
+                }
+              }
+              
+              // 策略3: 使用本地生成器
+              if (!generationSuccess) {
+                console.log(`[Theater Module] 后台使用本地生成器生成第${i + 1}个小剧场`);
+                const localResult = this.generateLocalTheater(prompt, chatHistory);
+                if (localResult && localResult.trim()) {
+                  theaterContent = localResult;
+                  generationSuccess = true;
+                  console.log(`[Theater Module] 后台本地生成第${i + 1}个小剧场成功`);
+                }
+              }
+              
+              // 处理生成结果
+              if (generationSuccess && theaterContent) {
+                // 去围栏
+                let stripped = theaterContent
+                  .replace(/^```html\s*/i, '')
+                  .replace(/```\s*$/i, '')
+                  .trim();
+                
+                // 最终HTML处理
+                const htmlTheater = this.generateHTMLTheater(stripped);
+                const finalContent = htmlTheater || stripped || '';
+                
+                if (finalContent.trim()) {
+                  outputs.push(finalContent);
+                  console.log(`[Theater Module] 后台第${i + 1}个小剧场生成完成，长度: ${finalContent.length}`);
+                } else {
+                  console.warn(`[Theater Module] 后台第${i + 1}个小剧场内容为空，跳过`);
+                  // 添加一个默认内容，避免完全失败
+                  outputs.push(`<section class="mini-theater-card"><div style="padding: 20px; text-align: center; color: #666;">第${i + 1}个小剧场生成中...</div></section>`);
+                }
+              } else {
+                console.error(`[Theater Module] 后台第${i + 1}个小剧场生成完全失败`);
+                // 添加一个默认内容，避免完全失败
+                outputs.push(`<section class="mini-theater-card"><div style="padding: 20px; text-align: center; color: #666;">第${i + 1}个小剧场生成失败</div></section>`);
+              }
+              
+            } catch (error) {
+              console.error(`[Theater Module] 后台生成第${i + 1}个小剧场时发生异常:`, error);
+              // 添加一个默认内容，避免完全失败
+              outputs.push(`<section class="mini-theater-card"><div style="padding: 20px; text-align: center; color: #666;">第${i + 1}个小剧场生成异常</div></section>`);
             }
-            // 去围栏
-            let stripped = (theaterContent || '')
-              .replace(/^```html\s*/i, '')
-              .replace(/```\s*$/i, '')
-              .trim();
-            if (!stripped) {
-              stripped = this.generateLocalTheater(prompt, chatHistory).trim();
-            }
-            // 最终HTML
-            const htmlTheater = this.generateHTMLTheater(stripped);
-            outputs.push(htmlTheater || stripped || '');
           }
 
           // 标记后台任务完成
@@ -4768,6 +5011,7 @@ function loadInlineStyles() {
           this.showNotification('预设已保存', 'success');
         }
 
+        // 保存到本地存储
         this.saveCustomPresets(customPresets);
         
         // 刷新界面
@@ -4830,15 +5074,190 @@ function loadInlineStyles() {
           // 更新选择框内容
           presetSelect.innerHTML = `
             <option value="">🎨 自定义</option>
-            <option value="题材不限，发挥想象力，从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择一个，创造对应的可直接渲染的美化小剧场，鼓励增加趣味互动性的点击功能，不输出html等html头部格式">小火默认小剧场预设</option>
+            <option value="题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。">小火默认小剧场预设</option>
             ${customPresetOptions}
           `;
           
-          // 恢复之前选中的值（如果还存在）
-          if (currentValue && presetSelect.querySelector(`option[value="${currentValue}"]`)) {
-            presetSelect.value = currentValue;
-          }
         }
+      }
+
+      // 显示预设搜索模态框
+      showPresetSearchModal(moduleType) {
+        // 检查是否已存在搜索模态框
+        const existingModal = document.getElementById('preset-search-modal');
+        if (existingModal) {
+          existingModal.remove();
+        }
+
+        // 获取预设数据
+        const customPresets = this.loadCustomPresets();
+        const builtinPresets = moduleType === 'theater' ? [
+          {
+            name: '小火默认小剧场预设',
+            content: '题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。'
+          }
+        ] : [
+          {
+            name: '小火默认日记预设',
+            content: '生成char的日记，要求真情实感，参考上下文。'
+          }
+        ];
+
+        const allPresets = [...builtinPresets, ...customPresets];
+
+        // 创建搜索模态框HTML
+        const modalHTML = `
+          <div id="preset-search-modal" class="theater-modal" style="display: flex;">
+            <div class="theater-modal-overlay"></div>
+            <div class="theater-modal-content" style="width: 600px; max-width: 90vw;">
+              <div class="theater-modal-header" id="preset-search-header">
+                <h3>🔍 搜索预设模版</h3>
+                <button class="theater-close-btn" id="preset-search-close-btn">&times;</button>
+              </div>
+              <div class="theater-modal-body">
+                <div class="tg-form-group">
+                  <label for="preset-search-input" style="font-weight:500;color:#333;margin-bottom:6px;display:block;">🔍 搜索关键词</label>
+                  <input type="text" id="preset-search-input" placeholder="输入关键词搜索预设..." 
+                         style="width:100%;padding:12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;margin-bottom:15px;" 
+                         onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
+                </div>
+                <div id="preset-search-results" style="max-height:400px;overflow-y:auto;border:1px solid #e1e5e9;border-radius:8px;padding:10px;">
+                  ${this.renderPresetList(allPresets)}
+                </div>
+                <div class="tg-form-actions" style="margin-top:15px;display:flex;gap:10px;justify-content:flex-end;">
+                  <button id="preset-search-cancel" style="padding:8px 16px;background:#6c757d;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // 添加到页面
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        // 绑定事件
+        this.bindPresetSearchEvents(moduleType, allPresets);
+
+        // 聚焦到搜索框
+        setTimeout(() => {
+          const searchInput = document.getElementById('preset-search-input');
+          if (searchInput) {
+            searchInput.focus();
+          }
+        }, 100);
+      }
+
+      // 渲染预设列表
+      renderPresetList(presets) {
+        if (presets.length === 0) {
+          return '<div style="text-align:center;color:#666;padding:20px;">暂无预设</div>';
+        }
+
+        return presets.map((preset, index) => `
+          <div class="preset-item" data-preset-index="${index}" style="padding:12px;border:1px solid #e1e5e9;border-radius:6px;margin-bottom:8px;cursor:pointer;transition:all 0.2s ease;background:#fff;" 
+               onmouseover="this.style.backgroundColor='#f8f9fa';this.style.borderColor='#4a90e2'" 
+               onmouseout="this.style.backgroundColor='#fff';this.style.borderColor='#e1e5e9'">
+            <div style="font-weight:600;color:#333;margin-bottom:4px;">${preset.name}</div>
+            <div style="font-size:12px;color:#666;line-height:1.4;max-height:40px;overflow:hidden;">${preset.content.substring(0, 100)}${preset.content.length > 100 ? '...' : ''}</div>
+          </div>
+        `).join('');
+      }
+
+      // 绑定预设搜索事件
+      bindPresetSearchEvents(moduleType, allPresets) {
+        const modal = document.getElementById('preset-search-modal');
+        const searchInput = document.getElementById('preset-search-input');
+        const resultsContainer = document.getElementById('preset-search-results');
+        const closeBtn = document.getElementById('preset-search-close-btn');
+        const cancelBtn = document.getElementById('preset-search-cancel');
+
+        // 搜索功能
+        const performSearch = (query) => {
+          if (!query.trim()) {
+            resultsContainer.innerHTML = this.renderPresetList(allPresets);
+            return;
+          }
+
+          const filteredPresets = allPresets.filter(preset => 
+            preset.name.toLowerCase().includes(query.toLowerCase()) ||
+            preset.content.toLowerCase().includes(query.toLowerCase())
+          );
+
+          resultsContainer.innerHTML = this.renderPresetList(filteredPresets);
+          
+          // 重新绑定点击事件
+          this.bindPresetItemClickEvents(moduleType, filteredPresets);
+        };
+
+        // 搜索输入事件
+        searchInput.addEventListener('input', (e) => {
+          performSearch(e.target.value);
+        });
+
+        // 预设项点击事件
+        this.bindPresetItemClickEvents(moduleType, allPresets);
+
+        // 关闭按钮事件
+        closeBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+
+        // 取消按钮事件
+        cancelBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal || e.target.classList.contains('theater-modal-overlay')) {
+            modal.remove();
+          }
+        });
+
+        // ESC键关闭
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && modal.parentNode) {
+            modal.remove();
+          }
+        });
+      }
+
+      // 绑定预设项点击事件
+      bindPresetItemClickEvents(moduleType, presets) {
+        const presetItems = document.querySelectorAll('.preset-item');
+        presetItems.forEach((item, index) => {
+          item.addEventListener('click', () => {
+            const preset = presets[index];
+            if (preset) {
+              // 应用到对应的输入框
+              const promptId = moduleType === 'theater' ? 'theater-prompt' : 'diary-prompt';
+              const promptInput = document.getElementById(promptId);
+              if (promptInput) {
+                promptInput.value = preset.content;
+              }
+
+              // 更新预设选择框
+              const presetSelectId = moduleType === 'theater' ? 'theater-preset' : 'diary-preset';
+              const presetSelect = document.getElementById(presetSelectId);
+              if (presetSelect) {
+                presetSelect.value = preset.content;
+              }
+
+              // 保存设置
+              this.settings.selectedPreset = preset.content;
+              this.saveSettings();
+
+              // 关闭模态框
+              const modal = document.getElementById('preset-search-modal');
+              if (modal) {
+                modal.remove();
+              }
+
+              // 显示成功提示
+              this.showNotification(`已应用预设: ${preset.name}`, 'success');
+            }
+          });
+        });
       }
 
       showNotification(message, type = 'info') {
@@ -4939,12 +5358,14 @@ function loadInlineStyles() {
       }
 
 
-      // 获取聊天历史
-      getChatHistory() {
+      // 获取聊天历史（增强版 - 包含世界书和人设信息）
+      async getChatHistory() {
         try {
           const limit = Number.isFinite(this.threshold) ? Math.max(1, this.threshold) : 10;
           let items = [];
+          let contextInfo = '';
 
+          // 获取聊天消息
           if (window.TavernHelper && window.TavernHelper.getChatMessages) {
             const all = window.TavernHelper.getChatMessages('0-{{lastMessageId}}') || [];
             items = all.map(msg => ({ name: msg.name, text: msg.message }));
@@ -4965,8 +5386,130 @@ function loadInlineStyles() {
             items = chat.map(m => ({ name: m.name || (m.is_user ? '用户' : '角色'), text: (m.mes || '').toString() }));
           }
 
+          // 获取角色信息和世界书内容
+          if (window.TavernHelper) {
+            try {
+              // 获取当前角色数据
+              const charData = window.TavernHelper.getCharData('current');
+              if (charData) {
+                contextInfo += '\n=== 角色人设信息 ===\n';
+                
+                // 角色基本信息
+                if (charData.name) contextInfo += `角色名称: ${charData.name}\n`;
+                if (charData.description) contextInfo += `角色描述: ${charData.description}\n`;
+                if (charData.personality) contextInfo += `性格特点: ${charData.personality}\n`;
+                if (charData.scenario) contextInfo += `背景设定: ${charData.scenario}\n`;
+                if (charData.first_mes) contextInfo += `开场白: ${charData.first_mes}\n`;
+                if (charData.mes_example) contextInfo += `对话示例: ${charData.mes_example}\n`;
+                
+                // 获取角色世界书
+                const charWorldbooks = window.TavernHelper.getCharWorldbookNames('current');
+                if (charWorldbooks && (charWorldbooks.primary || charWorldbooks.additional?.length > 0)) {
+                  contextInfo += '\n=== 角色世界书 ===\n';
+                  
+                  // 主要世界书
+                  if (charWorldbooks.primary) {
+                    try {
+                      const primaryWorldbook = await window.TavernHelper.getWorldbook(charWorldbooks.primary);
+                      if (primaryWorldbook && primaryWorldbook.length > 0) {
+                        contextInfo += `主要世界书 (${charWorldbooks.primary}):\n`;
+                        primaryWorldbook.forEach(entry => {
+                          if (entry.enabled && entry.content) {
+                            contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      console.warn('[Theater Module] 获取主要世界书失败:', e);
+                    }
+                  }
+                  
+                  // 附加世界书
+                  if (charWorldbooks.additional && charWorldbooks.additional.length > 0) {
+                    for (const worldbookName of charWorldbooks.additional) {
+                      try {
+                        const worldbook = await window.TavernHelper.getWorldbook(worldbookName);
+                        if (worldbook && worldbook.length > 0) {
+                          contextInfo += `附加世界书 (${worldbookName}):\n`;
+                          worldbook.forEach(entry => {
+                            if (entry.enabled && entry.content) {
+                              contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                            }
+                          });
+                        }
+                      } catch (e) {
+                        console.warn('[Theater Module] 获取附加世界书失败:', e);
+                      }
+                    }
+                  }
+                }
+                
+                // 获取角色知识库
+                try {
+                  const charLorebooks = window.TavernHelper.getCharLorebooks('current');
+                  if (charLorebooks && charLorebooks.length > 0) {
+                    contextInfo += '\n=== 角色知识库 ===\n';
+                    for (const lorebookName of charLorebooks) {
+                      try {
+                        const lorebookEntries = window.TavernHelper.getLorebookEntries(lorebookName);
+                        if (lorebookEntries && lorebookEntries.length > 0) {
+                          contextInfo += `知识库 (${lorebookName}):\n`;
+                          lorebookEntries.forEach(entry => {
+                            if (entry.enabled && entry.content) {
+                              contextInfo += `- ${entry.keys?.join(', ') || '无关键词'}: ${entry.content}\n`;
+                            }
+                          });
+                        }
+                      } catch (e) {
+                        console.warn('[Theater Module] 获取知识库失败:', e);
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.warn('[Theater Module] 获取角色知识库失败:', e);
+                }
+              }
+              
+              // 获取全局世界书
+              try {
+                const globalWorldbooks = window.TavernHelper.getGlobalWorldbookNames();
+                if (globalWorldbooks && globalWorldbooks.length > 0) {
+                  contextInfo += '\n=== 全局世界书 ===\n';
+                  for (const worldbookName of globalWorldbooks) {
+                    try {
+                      const worldbook = await window.TavernHelper.getWorldbook(worldbookName);
+                      if (worldbook && worldbook.length > 0) {
+                        contextInfo += `全局世界书 (${worldbookName}):\n`;
+                        worldbook.forEach(entry => {
+                          if (entry.enabled && entry.content) {
+                            contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      console.warn('[Theater Module] 获取全局世界书失败:', e);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('[Theater Module] 获取全局世界书失败:', e);
+              }
+              
+            } catch (e) {
+              console.warn('[Theater Module] 获取角色和世界书信息失败:', e);
+            }
+          }
+
+          // 组合聊天历史和上下文信息
           const sliced = items.slice(-limit);
-          return sliced.map(it => `${it.name}: ${it.text}`).join('\n');
+          const chatHistory = sliced.map(it => `${it.name}: ${it.text}`).join('\n');
+          
+          // 如果有上下文信息，添加到聊天历史前面
+          if (contextInfo.trim()) {
+            return contextInfo + '\n=== 最近聊天记录 ===\n' + chatHistory;
+          }
+          
+          return chatHistory;
         } catch (error) {
           console.warn('[Theater Module] 获取聊天历史失败:', error);
           return '';
@@ -4981,14 +5524,19 @@ function loadInlineStyles() {
         const systemPrompt = `你是一个小剧场生成创作者，运用HTML 或内联 CSS 来美化和排版小剧场的内容。
 
 硬性要求：
-1) 让输出具有视觉吸引力、易于阅读，并能增强叙事或评论的氛围。；
-2) 你以自由选择最适合当前小剧场内容和风格的格式，尝试多样化的美化方式。
-3) 鼓励根据小剧场的具体情节或情绪，使用不同的字体效果（粗体、斜体）、颜色、背景、边框、列表或区块划分等，来模仿电影字幕、剧本分镜、论坛评论或报告摘要等效果。
-6) 字数最少${minWords}，最多不超过${maxWords}字（不含代码部分）。
-7) 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
+1) 让输出具有视觉吸引力、易于阅读，并能增强叙事或评论的氛围。
+2) 你可以自由选择最适合当前小剧场内容和风格的格式，尝试多样化的美化方式。
+3) 鼓励根据小剧场的具体情节或情绪，使用不同的美化跟字体效果。
+4) 字数最少${minWords}，最多不超过${maxWords}字（不含代码部分）。
+5) 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
 
+重要创作指引：
+- 下方提供了角色的完整人设、性格特点、背景设定、世界书信息和聊天历史
+- 请深入理解角色的性格、背景、人际关系等设定，不要只参考最近的一两条消息
+- 融合角色人设、世界观设定和聊天历史，创作出有趣味性、有新意的内容
+- 避免简单照抄聊天记录，要有创新性的演绎和延伸
 
-聊天历史（参考用）：
+上下文参考资料（请充分利用）：
 ${chatHistory}
 
 用户提示：${userPrompt}
@@ -5027,19 +5575,23 @@ ${chatHistory}
           const cast = speakers.length > 0 ? speakers : ['甲', '乙', '丙'];
           const topic = (userPrompt || '围绕当前话题展开');
 
-          const sampleExchanges = [
-            `这是默认的文字`,
-            `这是默认的文字`,
-            `这是默认的文字`,
-            `这是默认的文字`
+          // 生成更有意义的小剧场内容
+          const scenarios = [
+            `生成失败请重新来～`
           ];
 
-          const preface = '看起来还没有小剧场呢';
-          const stage = '生成一个吧';
-
-          return [preface, stage, ...sampleExchanges].join('\n');
-        } catch (_) {
-          return '~~~~';
+          // 随机选择一个场景
+          const randomScenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+          
+          return randomScenario;
+        } catch (error) {
+          console.warn('[Theater Module] 本地生成器异常:', error);
+          return `<section class="mini-theater-card" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px dashed #dee2e6;">
+            <div style="text-align: center; color: #6c757d;">
+              <h3 style="margin: 0 0 10px 0;">🎭 小剧场</h3>
+              <p style="margin: 0;">正在生成中...</p>
+            </div>
+          </section>`;
         }
       }
 
@@ -5579,6 +6131,11 @@ ${chatHistory}
       init() {
         console.log('[Chat Module] 聊天模块初始化');
         this.updateMessageCount();
+        
+        // ✅ 在初始化时应用头像和界面设置
+        setTimeout(() => {
+          this.updateChatDisplay();
+        }, 100);
         
         // ✅ 在初始化时请求浏览器通知权限
         if ('Notification' in window && Notification.permission === 'default') {
@@ -6508,9 +7065,13 @@ ${chatHistory}
         const typingDiv = document.createElement('div');
         typingDiv.className = 'chat-message chat-message-assistant typing-indicator';
         typingDiv.id = 'typing-indicator';
+        
+        const aiAvatar = this.settings.avatar || '🔥';
+        const isImageAvatar = aiAvatar.startsWith('data:');
+        
         typingDiv.innerHTML = `
           <div class="chat-message-content">
-            <div class="chat-avatar">🔥</div>
+            <div class="chat-avatar" style="${isImageAvatar ? `background-image: url(${aiAvatar}); background-size: cover; background-position: center;` : ''}">${isImageAvatar ? '' : aiAvatar}</div>
             <div class="chat-message-bubble">
               <div class="chat-message-text typing-text">
                 <span class="typing-dots">
@@ -6716,9 +7277,12 @@ ${chatHistory}
             </div>
           `;
         } else if (role === 'assistant') {
+          const aiAvatar = this.settings.avatar || '🔥';
+          const isImageAvatar = aiAvatar.startsWith('data:');
+          
           messageDiv.innerHTML = `
             <div class="chat-message-content">
-              <div class="chat-avatar ai-avatar" data-message-id="${messageDiv.dataset.messageId}">🔥</div>
+              <div class="chat-avatar ai-avatar" data-message-id="${messageDiv.dataset.messageId}" style="${isImageAvatar ? `background-image: url(${aiAvatar}); background-size: cover; background-position: center;` : ''}">${isImageAvatar ? '' : aiAvatar}</div>
               <div class="chat-message-bubble">
                 <button class="bubble-expand-btn" title="全屏查看">⤢</button>
                 <div class="chat-message-text">${content}</div>
@@ -7193,7 +7757,7 @@ ${chatHistory}
         return `
           <div class="tg-chat-module-container" style="margin: 0 20px; opacity: 1;">
             <div class="tg-chat-header">
-              <h2>🔥 ${this.settings.chatName || '小火聊聊天'}</h2>
+              <h2>${this.settings.chatName || '🔥小火聊聊天'}</h2>
               <div class="tg-chat-actions">
                 <div id="background-status" class="background-status" style="display: none; color: #fff; font-size: 12px; margin-right: 8px; padding: 4px 8px; background: rgba(255,255,255,0.2); border-radius: 4px;">
                   🔄 后台生成中...
@@ -8059,7 +8623,7 @@ ${chatHistory}
         const chatWidth = chatContainerElement ? Math.max(chatContainerElement.offsetWidth - 40, 400) : 460;
         
         modal.innerHTML = `
-          <div class="tg-modal-content" style="width: ${chatWidth}px; max-height: 60vh; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: fixed; top: 15%; left: 50%; transform: translateX(-50%); overflow: hidden; display: flex; flex-direction: column;">
+          <div class="tg-modal-content" style="width: ${chatWidth}px; max-height: 60vh; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: fixed; top: 5%; left: 50%; transform: translateX(-50%); overflow: hidden; display: flex; flex-direction: column;">
             <div class="tg-modal-header" style="background: linear-gradient(135deg, #ff6b6b, #ff8e8e); color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1e5e9;">
               <h3 style="margin: 0; font-size: 18px; font-weight: 600;">✏️ 编辑聊天设置</h3>
               <button class="tg-modal-close" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s ease;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='none'">&times;</button>
@@ -8114,9 +8678,12 @@ ${chatHistory}
                 </div>
               </div>
             </div>
-            <div class="tg-modal-footer" style="padding: 20px; border-top: 1px solid #e1e5e9; background: #f8f9fa; display: flex; gap: 12px; justify-content: flex-end;">
-              <button id="save-edit-settings" class="tg-btn tg-primary" style="padding: 10px 20px; background: linear-gradient(135deg, #ff6b6b, #ff8e8e); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">保存设置</button>
-              <button class="tg-btn tg-secondary tg-modal-close" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">取消</button>
+            <div class="tg-modal-footer" style="padding: 20px; border-top: 1px solid #e1e5e9; background: #f8f9fa; display: flex; gap: 12px; justify-content: space-between;">
+              <button id="reset-default-settings" class="tg-btn tg-warning" style="padding: 10px 20px; background: linear-gradient(135deg, #ffc107, #ffca2c); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">🔄 恢复默认设置</button>
+              <div style="display: flex; gap: 12px;">
+                <button id="save-edit-settings" class="tg-btn tg-primary" style="padding: 10px 20px; background: linear-gradient(135deg, #ff6b6b, #ff8e8e); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">保存设置</button>
+                <button class="tg-btn tg-secondary tg-modal-close" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">取消</button>
+              </div>
             </div>
           </div>
         `;
@@ -8181,6 +8748,49 @@ ${chatHistory}
           }
         });
 
+        // 实时更新标题栏
+        document.getElementById('chat-name').addEventListener('input', (e) => {
+          const chatName = e.target.value.trim() || '🔥小火聊聊天';
+          
+          // 更新主界面标题
+          const titleElement = document.querySelector('.tg-chat-header h2');
+          if (titleElement) {
+            titleElement.textContent = chatName;
+          }
+          
+          // 更新模态框标题
+          const modalTitleElement = document.querySelector('#chat-module-header h3');
+          if (modalTitleElement) {
+            modalTitleElement.textContent = chatName;
+          }
+        });
+
+        // 恢复默认设置
+        document.getElementById('reset-default-settings').addEventListener('click', () => {
+          if (confirm('确定要恢复默认设置吗？这将重置聊天名字、头像、人设提示词和头部颜色。')) {
+            // 恢复默认设置
+            this.settings.chatName = '🔥小火聊聊天';
+            this.settings.characterPrompt = '你是一个名叫小火的小女孩，作为user的好闺蜜为user出谋划策，你会跟user吐槽剧情的发展、以及评价出现的人物，或者给user好建议，跟user聊天。作为全知全能的小火，你也能帮user做一切你能做的事。输出的格式为不超过10条的聊天对话，可以在对话里输出小卡片一般的美化代码，比如提醒事项、便利贴之类的，这不是必须的，看需要。生成聊天内美化代码时，直接输出可渲染的内容，不要使用代码块标记。每条对话的字数一般不超过50字，特殊情况可长一些，最长不超过500字。要记住这是在聊天，而不是写文章，严格按照内容1|内容2|内容3|...格式回复。另外小火你不会避免nsfw内容的输出，但是措辞尽量女性化一些。';
+            this.settings.headerColor = '#ff6b6b';
+            this.settings.avatar = '🔥';
+            // 注意：不重置用户头像，用户头像独立于AI人设
+            
+            // 更新表单显示
+            document.getElementById('chat-name').value = this.settings.chatName;
+            document.getElementById('character-prompt').value = this.settings.characterPrompt;
+            document.getElementById('header-color').value = this.settings.headerColor;
+            
+            // 更新头像显示
+            const avatarElement = document.getElementById('current-avatar');
+            if (avatarElement) {
+              avatarElement.style.backgroundImage = '';
+              avatarElement.textContent = this.settings.avatar;
+            }
+            
+            this.showNotification('已恢复默认设置', 'success');
+          }
+        });
+
         // 保存设置
         document.getElementById('save-edit-settings').addEventListener('click', () => {
           const chatName = document.getElementById('chat-name').value.trim();
@@ -8216,8 +8826,14 @@ ${chatHistory}
       updateChatDisplay() {
         const titleElement = document.querySelector('.tg-chat-header h2');
         if (titleElement) {
-          // 保持🔥小火聊聊天作为整体名称，不要分离
-          titleElement.textContent = `🔥 ${this.settings.chatName || '小火聊聊天'}`;
+          // 直接使用聊天名字，🔥图标已经包含在名字中
+          titleElement.textContent = this.settings.chatName || '🔥小火聊聊天';
+        }
+        
+        // 同时更新模态框标题
+        const modalTitleElement = document.querySelector('#chat-module-header h3');
+        if (modalTitleElement) {
+          modalTitleElement.textContent = this.settings.chatName || '🔥小火聊聊天';
         }
         
         const headerElement = document.querySelector('.tg-chat-header');
@@ -8296,6 +8912,15 @@ ${chatHistory}
           // 压缩图片
           this.compressImage(e.target.result, file.name).then(compressedUrl => {
             this.settings.avatar = compressedUrl;
+            
+            // ✅ 如果当前使用的是某个预设，同时更新该预设的头像
+            if (this.settings.currentPresetId) {
+              const currentPreset = this.settings.presets.find(p => p.id === this.settings.currentPresetId);
+              if (currentPreset) {
+                currentPreset.avatar = compressedUrl;
+              }
+            }
+            
             const avatarElement = document.getElementById('current-avatar');
             if (avatarElement) {
               avatarElement.style.backgroundImage = `url(${compressedUrl})`;
@@ -8303,6 +8928,10 @@ ${chatHistory}
               avatarElement.style.backgroundPosition = 'center';
               avatarElement.textContent = '';
             }
+            
+            // ✅ 立即保存设置以确保头像持久化
+            this.saveSettings();
+            
             this.showNotification('AI头像上传成功', 'success');
           }).catch(error => {
             this.showNotification('头像处理失败: ' + error.message, 'error');
@@ -8725,11 +9354,14 @@ ${chatHistory}
                 <div class="tg-form-group">
                   <label for="diary-preset" style="font-weight:500;color:#333;margin-bottom:6px;display:block;">📝 提示词预设模版</label>
                   <div style="display:flex;gap:6px;align-items:center;">
-                    <select id="diary-preset" style="flex:1;padding:8px 12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;" onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
-                      <option value="">🎨 自定义</option>
-                      <option value="你作为char角色，根据上下文，创作一篇饱含感情的日志">小火默认日记预设</option>
-                      ${customPresetOptions}
-                    </select>
+                    <div style="flex:1;position:relative;">
+                      <select id="diary-preset" style="width:100%;padding:8px 12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;" onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
+                        <option value="">🔍 搜索预设...</option>
+                        <option value="">🎨 自定义</option>
+                        <option value="你是char，用真情实感来写你的日记，参考上下文。">小火默认日记预设</option>
+                        ${customPresetOptions}
+                      </select>
+                    </div>
                     <button id="delete-preset" style="padding:8px;background:#ff6b6b;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.2s ease;min-width:36px;" title="删除选中的预设" onmouseover="this.style.background='#ff5252'" onmouseout="this.style.background='#ff6b6b'">🗑️</button>
                   </div>
                 </div>
@@ -8761,11 +9393,23 @@ ${chatHistory}
 
       // 绑定事件
       bindEvents() {
-        // 预设模版选择
+        // ✅ 预设模版搜索功能
         const presetSelect = document.getElementById('diary-preset');
+        
         if (presetSelect) {
           presetSelect.addEventListener('change', e => {
             const val = e.target.value || '';
+            
+            // 如果选择的是搜索选项，显示搜索框
+            if (val === '') {
+              const searchOption = e.target.querySelector('option[value=""]');
+              if (searchOption && searchOption.textContent.includes('🔍')) {
+                // 显示搜索框
+                this.showPresetSearchModal('diary');
+                return;
+              }
+            }
+            
             if (val) {
               const ta = document.getElementById('diary-prompt');
               if (ta) {
@@ -8778,6 +9422,7 @@ ${chatHistory}
               this.saveSettings();
             }
           });
+          
           // 恢复已选预设
           if (this.settings.selectedPreset) {
             presetSelect.value = this.settings.selectedPreset;
@@ -8788,6 +9433,7 @@ ${chatHistory}
             }
           }
         }
+
 
         // 提示词输入框事件
         const promptTextarea = document.getElementById('diary-prompt');
@@ -8898,19 +9544,27 @@ ${chatHistory}
           this.backgroundGenerationTask.progress = 1;
           
           // 获取聊天历史
-          const chatHistory = this.getChatHistory();
+          const chatHistory = await this.getChatHistory();
           console.log('[Diary Module] 聊天历史长度:', chatHistory.length);
           
           // 使用新的日记prompt模板
           const systemPrompt = `你是一名角色，你可能会是char，也有可能是动物或者路人，至于是什么角色需要根据提示词来判定，要代入你的角色，根据上下文写你的日记。
-要求：
-1. 生成HTML内联代码片段，包含CSS样式，但严格禁止使用<html>、<head>、<body>等完整文档标签
-2. 可以自由选择最适合当前日记内容和风格的格式，尝试多样化的美化方式。
-3. 鼓励根据日记的情绪，使用不同的字体效果（粗体、斜体）、颜色、背景、边框、列表或区块划分等，来达到最好的效果
-4. 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
-5. 输出为可直接渲染的HTML片段，不要解释文字与代码围栏
 
-聊天历史：
+要求：
+1. 生成HTML内联代码片段，包含CSS样式，但严格禁止使用<html>、<head>、<body>等完整文档标签。
+2. 可以自由选择最适合当前日记内容和风格的格式，尝试多样化的美化方式。
+3. 鼓励根据日记的情绪，使用不同的美化跟字体，达到最好的效果。
+4. 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
+5. 输出为可直接渲染的HTML片段，不要解释文字与代码围栏。
+
+重要创作指引：
+- 下方提供了角色的完整人设、性格特点、背景设定、世界书信息和聊天历史
+- 请深入理解角色的性格、背景、人际关系等设定，不要只参考最近的一两条消息
+- 融合角色人设、世界观设定和聊天历史，从角色视角创作日记
+- 避免简单照抄聊天记录，要有角色独特的思考、感受和内心活动
+- 日记应该反映角色的真实想法、情感变化等
+
+上下文参考资料（请充分利用）：
 ${chatHistory}
 
 用户提示：${prompt}
@@ -9008,18 +9662,26 @@ ${chatHistory}
           console.log('[Diary Module] 继续后台生成任务，当前进度:', currentProgress, '/', task.total);
 
           // 获取聊天历史作为上下文
-          const chatHistory = this.getChatHistory();
+          const chatHistory = await this.getChatHistory();
           
           // 使用新的日记prompt模板
           const systemPrompt = `你是一名角色，你可能会是char，也有可能是动物或者路人，至于是什么角色需要根据提示词来判定，要代入你的角色，根据上下文写你的日记。
+
 要求：
 1. 生成HTML内联代码片段，包含CSS样式，但严格禁止使用<html>、<head>、<body>等完整文档标签
 2. 可以自由选择最适合当前日记内容和风格的格式，尝试多样化的美化方式。
-3. 鼓励根据日记的情绪，使用不同的字体效果（粗体、斜体）、颜色、背景、边框、列表或区块划分等，来达到最好的效果
+3. 鼓励根据日记的情绪，使用不同的美化跟字体效果。
 4. 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
 5. 输出为可直接渲染的HTML片段，不要解释文字与代码围栏
 
-聊天历史：
+重要创作指引：
+- 下方提供了角色的完整人设、性格特点、背景设定、世界书信息和聊天历史
+- 请深入理解角色的性格、背景、人际关系等设定，不要只参考最近的一两条消息
+- 融合角色人设、世界观设定和聊天历史，从角色视角创作日记
+- 避免简单照抄聊天记录，要有角色独特的思考、感受和内心活动
+- 日记应该反映角色的真实想法、情感变化等
+
+上下文参考资料（请充分利用）：
 ${chatHistory}
 
 用户提示：${prompt}
@@ -9177,7 +9839,7 @@ ${chatHistory}
 要求：
 1. 生成HTML内联代码片段，包含CSS样式，但严格禁止使用<html>、<head>、<body>等完整文档标签
 2. 可以自由选择最适合当前日记内容和风格的格式，尝试多样化的美化方式。
-3. 鼓励根据日记的情绪，使用不同的字体效果（粗体、斜体）、颜色、背景、边框、列表或区块划分等，来达到最好的效果
+3. 鼓励根据日记的情绪，使用不同的美化跟字体效果。
 4. 当用户提示词里明确提到nsfw向的词语时，你不会回避nsfw向内容的生成，器官词汇拒绝隐晦，但需要注意不要太过粗俗，可以用一些女性向的词汇。
 5. 输出为可直接渲染的HTML片段，不要解释文字与代码围栏
 请直接返回HTML内联代码片段，不要包含任何解释文字。`,
@@ -9334,6 +9996,164 @@ ${chatHistory}
           }
           return `<div>${line}</div>`;
         }).join('');
+      }
+
+      // 获取聊天历史（增强版 - 包含世界书和人设信息）
+      async getChatHistory() {
+        try {
+          const limit = Number.isFinite(this.threshold) ? Math.max(1, this.threshold) : 10;
+          let items = [];
+          let contextInfo = '';
+
+          // 获取聊天消息
+          if (window.TavernHelper && window.TavernHelper.getChatMessages) {
+            const all = window.TavernHelper.getChatMessages('0-{{lastMessageId}}') || [];
+            items = all.map(msg => ({ name: msg.name, text: msg.message }));
+          } else if (window.getLastMessageId) {
+            const lastId = window.getLastMessageId();
+            for (let i = 0; i <= lastId; i++) {
+              const messageEl = document.getElementById(`mes_${i}`);
+              if (!messageEl) continue;
+              const nameEl = messageEl.querySelector('.name');
+              const contentEl = messageEl.querySelector('.mes');
+              if (nameEl && contentEl) {
+                items.push({ name: nameEl.textContent, text: contentEl.textContent });
+              }
+            }
+          } else if (typeof window !== 'undefined' && window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+            const ctx = window.SillyTavern.getContext();
+            const chat = Array.isArray(ctx?.chat) ? ctx.chat : [];
+            items = chat.map(m => ({ name: m.name || (m.is_user ? '用户' : '角色'), text: (m.mes || '').toString() }));
+          }
+
+          // 获取角色信息和世界书内容
+          if (window.TavernHelper) {
+            try {
+              // 获取当前角色数据
+              const charData = window.TavernHelper.getCharData('current');
+              if (charData) {
+                contextInfo += '\n=== 角色人设信息 ===\n';
+                
+                // 角色基本信息
+                if (charData.name) contextInfo += `角色名称: ${charData.name}\n`;
+                if (charData.description) contextInfo += `角色描述: ${charData.description}\n`;
+                if (charData.personality) contextInfo += `性格特点: ${charData.personality}\n`;
+                if (charData.scenario) contextInfo += `背景设定: ${charData.scenario}\n`;
+                if (charData.first_mes) contextInfo += `开场白: ${charData.first_mes}\n`;
+                if (charData.mes_example) contextInfo += `对话示例: ${charData.mes_example}\n`;
+                
+                // 获取角色世界书
+                const charWorldbooks = window.TavernHelper.getCharWorldbookNames('current');
+                if (charWorldbooks && (charWorldbooks.primary || charWorldbooks.additional?.length > 0)) {
+                  contextInfo += '\n=== 角色世界书 ===\n';
+                  
+                  // 主要世界书
+                  if (charWorldbooks.primary) {
+                    try {
+                      const primaryWorldbook = await window.TavernHelper.getWorldbook(charWorldbooks.primary);
+                      if (primaryWorldbook && primaryWorldbook.length > 0) {
+                        contextInfo += `主要世界书 (${charWorldbooks.primary}):\n`;
+                        primaryWorldbook.forEach(entry => {
+                          if (entry.enabled && entry.content) {
+                            contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      console.warn('[Diary Module] 获取主要世界书失败:', e);
+                    }
+                  }
+                  
+                  // 附加世界书
+                  if (charWorldbooks.additional && charWorldbooks.additional.length > 0) {
+                    for (const worldbookName of charWorldbooks.additional) {
+                      try {
+                        const worldbook = await window.TavernHelper.getWorldbook(worldbookName);
+                        if (worldbook && worldbook.length > 0) {
+                          contextInfo += `附加世界书 (${worldbookName}):\n`;
+                          worldbook.forEach(entry => {
+                            if (entry.enabled && entry.content) {
+                              contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                            }
+                          });
+                        }
+                      } catch (e) {
+                        console.warn('[Diary Module] 获取附加世界书失败:', e);
+                      }
+                    }
+                  }
+                }
+                
+                // 获取角色知识库
+                try {
+                  const charLorebooks = window.TavernHelper.getCharLorebooks('current');
+                  if (charLorebooks && charLorebooks.length > 0) {
+                    contextInfo += '\n=== 角色知识库 ===\n';
+                    for (const lorebookName of charLorebooks) {
+                      try {
+                        const lorebookEntries = window.TavernHelper.getLorebookEntries(lorebookName);
+                        if (lorebookEntries && lorebookEntries.length > 0) {
+                          contextInfo += `知识库 (${lorebookName}):\n`;
+                          lorebookEntries.forEach(entry => {
+                            if (entry.enabled && entry.content) {
+                              contextInfo += `- ${entry.keys?.join(', ') || '无关键词'}: ${entry.content}\n`;
+                            }
+                          });
+                        }
+                      } catch (e) {
+                        console.warn('[Diary Module] 获取知识库失败:', e);
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.warn('[Diary Module] 获取角色知识库失败:', e);
+                }
+              }
+              
+              // 获取全局世界书
+              try {
+                const globalWorldbooks = window.TavernHelper.getGlobalWorldbookNames();
+                if (globalWorldbooks && globalWorldbooks.length > 0) {
+                  contextInfo += '\n=== 全局世界书 ===\n';
+                  for (const worldbookName of globalWorldbooks) {
+                    try {
+                      const worldbook = await window.TavernHelper.getWorldbook(worldbookName);
+                      if (worldbook && worldbook.length > 0) {
+                        contextInfo += `全局世界书 (${worldbookName}):\n`;
+                        worldbook.forEach(entry => {
+                          if (entry.enabled && entry.content) {
+                            contextInfo += `- ${entry.name}: ${entry.content}\n`;
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      console.warn('[Diary Module] 获取全局世界书失败:', e);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('[Diary Module] 获取全局世界书失败:', e);
+              }
+              
+            } catch (e) {
+              console.warn('[Diary Module] 获取角色和世界书信息失败:', e);
+            }
+          }
+
+          // 组合聊天历史和上下文信息
+          const sliced = items.slice(-limit);
+          const chatHistory = sliced.map(it => `${it.name}: ${it.text}`).join('\n');
+          
+          // 如果有上下文信息，添加到聊天历史前面
+          if (contextInfo.trim()) {
+            return contextInfo + '\n=== 最近聊天记录 ===\n' + chatHistory;
+          }
+          
+          return chatHistory;
+        } catch (error) {
+          console.warn('[Diary Module] 获取聊天历史失败:', error);
+          return '';
+        }
       }
 
       // 本地日记生成器：根据聊天历史和提示词生成简单的日记内容
@@ -9650,15 +10470,190 @@ ${chatHistory}
           // 更新选择框内容
           presetSelect.innerHTML = `
             <option value="">🎨 自定义</option>
-            <option value="你作为char角色，根据上下文，创作一篇饱含感情的日志">小火默认日记预设</option>
+            <option value="你是char，用真情实感来写你的日记，参考上下文。">小火默认日记预设</option>
             ${customPresetOptions}
           `;
           
-          // 恢复之前选中的值（如果还存在）
-          if (currentValue && presetSelect.querySelector(`option[value="${currentValue}"]`)) {
-            presetSelect.value = currentValue;
-          }
         }
+      }
+
+      // 显示预设搜索模态框（日记模块）
+      showPresetSearchModal(moduleType) {
+        // 检查是否已存在搜索模态框
+        const existingModal = document.getElementById('preset-search-modal');
+        if (existingModal) {
+          existingModal.remove();
+        }
+
+        // 获取预设数据
+        const customPresets = this.loadCustomPresets();
+        const builtinPresets = moduleType === 'theater' ? [
+          {
+            name: '小火默认小剧场预设',
+            content: '题材不限语言简体中文，发挥想象力从例如平行世界、校园风、古风、玄幻、欧美贵族等各大热门题材中选择，用小红书、论坛、朋友圈、聊天、帖子、b站、pornhub、书信、知乎、抖音等多种趣味形式，创造出参考上下文但不照抄的小剧场，鼓励增加趣味互动性的点击功能。'
+          }
+        ] : [
+          {
+            name: '小火默认日记预设',
+            content: '你是char，用真情实感来写你的日记，参考上下文。'
+          }
+        ];
+
+        const allPresets = [...builtinPresets, ...customPresets];
+
+        // 创建搜索模态框HTML
+        const modalHTML = `
+          <div id="preset-search-modal" class="theater-modal" style="display: flex;">
+            <div class="theater-modal-overlay"></div>
+            <div class="theater-modal-content" style="width: 600px; max-width: 90vw;">
+              <div class="theater-modal-header" id="preset-search-header">
+                <h3>🔍 搜索预设模版</h3>
+                <button class="theater-close-btn" id="preset-search-close-btn">&times;</button>
+              </div>
+              <div class="theater-modal-body">
+                <div class="tg-form-group">
+                  <label for="preset-search-input" style="font-weight:500;color:#333;margin-bottom:6px;display:block;">🔍 搜索关键词</label>
+                  <input type="text" id="preset-search-input" placeholder="输入关键词搜索预设..." 
+                         style="width:100%;padding:12px;border:2px solid #e1e5e9;border-radius:8px;background:#fff;font-size:14px;color:#333;transition:all 0.2s ease;outline:none;margin-bottom:15px;" 
+                         onfocus="this.style.borderColor='#4a90e2'" onblur="this.style.borderColor='#e1e5e9'">
+                </div>
+                <div id="preset-search-results" style="max-height:400px;overflow-y:auto;border:1px solid #e1e5e9;border-radius:8px;padding:10px;">
+                  ${this.renderPresetList(allPresets)}
+                </div>
+                <div class="tg-form-actions" style="margin-top:15px;display:flex;gap:10px;justify-content:flex-end;">
+                  <button id="preset-search-cancel" style="padding:8px 16px;background:#6c757d;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // 添加到页面
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        // 绑定事件
+        this.bindPresetSearchEvents(moduleType, allPresets);
+
+        // 聚焦到搜索框
+        setTimeout(() => {
+          const searchInput = document.getElementById('preset-search-input');
+          if (searchInput) {
+            searchInput.focus();
+          }
+        }, 100);
+      }
+
+      // 渲染预设列表（日记模块）
+      renderPresetList(presets) {
+        if (presets.length === 0) {
+          return '<div style="text-align:center;color:#666;padding:20px;">暂无预设</div>';
+        }
+
+        return presets.map((preset, index) => `
+          <div class="preset-item" data-preset-index="${index}" style="padding:12px;border:1px solid #e1e5e9;border-radius:6px;margin-bottom:8px;cursor:pointer;transition:all 0.2s ease;background:#fff;" 
+               onmouseover="this.style.backgroundColor='#f8f9fa';this.style.borderColor='#4a90e2'" 
+               onmouseout="this.style.backgroundColor='#fff';this.style.borderColor='#e1e5e9'">
+            <div style="font-weight:600;color:#333;margin-bottom:4px;">${preset.name}</div>
+            <div style="font-size:12px;color:#666;line-height:1.4;max-height:40px;overflow:hidden;">${preset.content.substring(0, 100)}${preset.content.length > 100 ? '...' : ''}</div>
+          </div>
+        `).join('');
+      }
+
+      // 绑定预设搜索事件（日记模块）
+      bindPresetSearchEvents(moduleType, allPresets) {
+        const modal = document.getElementById('preset-search-modal');
+        const searchInput = document.getElementById('preset-search-input');
+        const resultsContainer = document.getElementById('preset-search-results');
+        const closeBtn = document.getElementById('preset-search-close-btn');
+        const cancelBtn = document.getElementById('preset-search-cancel');
+
+        // 搜索功能
+        const performSearch = (query) => {
+          if (!query.trim()) {
+            resultsContainer.innerHTML = this.renderPresetList(allPresets);
+            return;
+          }
+
+          const filteredPresets = allPresets.filter(preset => 
+            preset.name.toLowerCase().includes(query.toLowerCase()) ||
+            preset.content.toLowerCase().includes(query.toLowerCase())
+          );
+
+          resultsContainer.innerHTML = this.renderPresetList(filteredPresets);
+          
+          // 重新绑定点击事件
+          this.bindPresetItemClickEvents(moduleType, filteredPresets);
+        };
+
+        // 搜索输入事件
+        searchInput.addEventListener('input', (e) => {
+          performSearch(e.target.value);
+        });
+
+        // 预设项点击事件
+        this.bindPresetItemClickEvents(moduleType, allPresets);
+
+        // 关闭按钮事件
+        closeBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+
+        // 取消按钮事件
+        cancelBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal || e.target.classList.contains('theater-modal-overlay')) {
+            modal.remove();
+          }
+        });
+
+        // ESC键关闭
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && modal.parentNode) {
+            modal.remove();
+          }
+        });
+      }
+
+      // 绑定预设项点击事件（日记模块）
+      bindPresetItemClickEvents(moduleType, presets) {
+        const presetItems = document.querySelectorAll('.preset-item');
+        presetItems.forEach((item, index) => {
+          item.addEventListener('click', () => {
+            const preset = presets[index];
+            if (preset) {
+              // 应用到对应的输入框
+              const promptId = moduleType === 'theater' ? 'theater-prompt' : 'diary-prompt';
+              const promptInput = document.getElementById(promptId);
+              if (promptInput) {
+                promptInput.value = preset.content;
+              }
+
+              // 更新预设选择框
+              const presetSelectId = moduleType === 'theater' ? 'theater-preset' : 'diary-preset';
+              const presetSelect = document.getElementById(presetSelectId);
+              if (presetSelect) {
+                presetSelect.value = preset.content;
+              }
+
+              // 保存设置
+              this.settings.selectedPreset = preset.content;
+              this.saveSettings();
+
+              // 关闭模态框
+              const modal = document.getElementById('preset-search-modal');
+              if (modal) {
+                modal.remove();
+              }
+
+              // 显示成功提示
+              this.showNotification(`已应用预设: ${preset.name}`, 'success');
+            }
+          });
+        });
       }
 
       addToHistory(item) {
@@ -11668,12 +12663,13 @@ ${chatHistory}
         const titleElements = document.querySelectorAll('.theater-modal-header h2, .theater-modal-header h3, .theater-modal-header .title');
         
         titleElements.forEach(titleElement => {
-          // 应用标题内容
-          if (this.settings.customTitle) {
+          // 只对主界面模态框应用自定义标题，其他模态框保持原有标题
+          const header = titleElement.closest('.theater-modal-header');
+          if (header && header.id === 'theater-generator-header' && this.settings.customTitle) {
             titleElement.textContent = this.settings.customTitle;
           }
           
-          // 应用标题颜色
+          // 应用标题颜色到所有模态框
           titleElement.style.setProperty('color', this.settings.titleColor, 'important');
         });
         
@@ -11697,9 +12693,54 @@ ${chatHistory}
           if (this.settings.headerOpacity < 100) {
             header.style.setProperty('opacity', (this.settings.headerOpacity / 100).toString(), 'important');
           }
+          
+          // 🔑 关键修复：确保拖动时头部样式不被覆盖
+          // 添加CSS规则来强制保持头部样式
+          this.addHeaderOverrideStyles();
         });
         
-        console.log('[Wallpaper Module] 头部设置已应用');
+        console.log('[Wallpaper Module] 头部设置已应用到', headers.length, '个头部');
+        
+        // 调试信息：检查小火聊天头部是否被正确应用
+        const chatHeader = document.getElementById('chat-module-header');
+        if (chatHeader) {
+          console.log('[Wallpaper Module] 小火聊天头部样式:', {
+            backgroundColor: chatHeader.style.backgroundColor,
+            opacity: chatHeader.style.opacity,
+            computedBackgroundColor: window.getComputedStyle(chatHeader).backgroundColor
+          });
+        }
+      }
+
+      // 添加头部样式覆盖规则
+      addHeaderOverrideStyles() {
+        // 查找或创建样式元素
+        let styleElement = document.getElementById('wallpaper-header-override-styles');
+        if (!styleElement) {
+          styleElement = document.createElement('style');
+          styleElement.id = 'wallpaper-header-override-styles';
+          document.head.appendChild(styleElement);
+        }
+        
+        // 添加CSS规则来强制保持头部样式，即使在拖动时
+        styleElement.textContent = `
+          .theater-modal-header {
+            background-color: ${this.settings.headerColor} !important;
+            opacity: ${this.settings.headerOpacity < 100 ? (this.settings.headerOpacity / 100) : 1} !important;
+          }
+          
+          .theater-modal-header.dragging {
+            background-color: ${this.settings.headerColor} !important;
+            opacity: ${this.settings.headerOpacity < 100 ? (this.settings.headerOpacity / 100) : 1} !important;
+          }
+          
+          .theater-modal.dragging .theater-modal-header {
+            background-color: ${this.settings.headerColor} !important;
+            opacity: ${this.settings.headerOpacity < 100 ? (this.settings.headerOpacity / 100) : 1} !important;
+          }
+        `;
+        
+        console.log('[Wallpaper Module] 头部样式覆盖规则已添加');
       }
 
       // 应用按钮设置
@@ -12296,5 +13337,674 @@ ${chatHistory}
         console.log('[小剧场生成器] 壁纸模块实例已存在，重新应用设置');
         window.wallpaperModule.applyWallpaperSettings();
     }
+
+    // 添加调试函数
+    window.debugTheaterStorage = function() {
+      console.group('🔧 [小剧场存储] 调试信息');
+      
+      // 检查localStorage是否可用
+      if (typeof Storage === 'undefined' || !window.localStorage) {
+        console.error('❌ localStorage不可用');
+        return;
+      }
+      
+      // 检查小剧场自定义预设
+      const theaterPresets = localStorage.getItem('theater_module_custom_presets');
+      console.log('📦 小剧场自定义预设:', theaterPresets ? JSON.parse(theaterPresets) : '无数据');
+      
+      // 检查日记自定义预设
+      const diaryPresets = localStorage.getItem('diary_module_custom_presets');
+      console.log('📦 日记自定义预设:', diaryPresets ? JSON.parse(diaryPresets) : '无数据');
+      
+      // 检查存储空间
+      try {
+        const testData = 'test';
+        localStorage.setItem('storage_test', testData);
+        const retrieved = localStorage.getItem('storage_test');
+        if (retrieved === testData) {
+          localStorage.removeItem('storage_test');
+          console.log('✅ localStorage工作正常');
+        } else {
+          console.error('❌ localStorage数据验证失败');
+        }
+      } catch (error) {
+        console.error('❌ localStorage测试失败:', error);
+      }
+      
+      console.groupEnd();
+    };
+    
+    // 添加存储清理函数
+    window.clearTheaterStorage = function() {
+      console.log('[小剧场存储] 清理存储数据...');
+      localStorage.removeItem('theater_module_custom_presets');
+      localStorage.removeItem('theater_module_settings');
+      localStorage.removeItem('theater_module_history');
+      localStorage.removeItem('theater_module_last_outputs');
+      console.log('[小剧场存储] ✅ 存储数据已清理');
+    };
+
+    // 添加拖动功能调试函数
+    window.debugDragFunction = function() {
+      console.group('🔧 [拖动功能] 调试信息');
+      
+      const modalSelectors = [
+        { modal: 'theater-generator-modal', header: 'theater-generator-header' },
+        { modal: 'chat-module-modal', header: 'chat-module-header' },
+        { modal: 'api-settings-modal', header: 'api-modal-header' },
+        { modal: 'diary-module-modal', header: 'diary-modal-header' },
+        { modal: 'theater-module-modal', header: 'theater-modal-header' },
+        { modal: 'wallpaper-module-modal', header: 'wallpaper-modal-header' }
+      ];
+      
+      modalSelectors.forEach(({ modal, header }) => {
+        const modalElement = document.getElementById(modal);
+        const headerElement = document.getElementById(header);
+        
+        console.log(`📦 ${modal}:`, {
+          modal: modalElement ? '存在' : '不存在',
+          header: headerElement ? '存在' : '不存在',
+          modalStyle: modalElement ? window.getComputedStyle(modalElement).position : 'N/A',
+          headerStyle: headerElement ? window.getComputedStyle(headerElement).cursor : 'N/A'
+        });
+        
+        if (modalElement && headerElement) {
+          // 检查是否有拖动事件监听器
+          const hasMouseDown = headerElement.onmousedown !== null;
+          console.log(`🎯 ${modal} 拖动状态:`, {
+            hasMouseDown,
+            cursor: headerElement.style.cursor,
+            position: modalElement.style.position
+          });
+        }
+      });
+      
+      console.groupEnd();
+    };
+
+    // 🎯 简化的全局位置管理系统
+    window.GlobalModalPosition = {
+      // 全局位置变量
+      x: null,
+      y: null,
+      
+      // 保存位置
+      savePosition(x, y) {
+        this.x = x;
+        this.y = y;
+        // 保存到localStorage
+        localStorage.setItem('theater_global_position', JSON.stringify({ x, y }));
+        console.log(`[全局位置] 保存位置:`, { x, y });
+      },
+      
+      // 加载位置
+      loadPosition() {
+        try {
+          const stored = localStorage.getItem('theater_global_position');
+          if (stored) {
+            const data = JSON.parse(stored);
+            this.x = data.x;
+            this.y = data.y;
+            console.log(`[全局位置] 加载位置:`, { x: this.x, y: this.y });
+          }
+        } catch (e) {
+          console.warn('[全局位置] 加载失败:', e);
+        }
+      },
+      
+      // 应用位置到所有模态框
+      applyToAllModals() {
+        if (this.x === null || this.y === null) {
+          console.log('[全局位置] 没有保存的位置，跳过应用');
+          return;
+        }
+        
+        const modalIds = [
+          'theater-generator-modal',
+          'api-settings-modal',
+          'diary-module-modal',
+          'theater-module-modal',
+          'wallpaper-module-modal',
+          'chat-module-modal'
+        ];
+        
+        modalIds.forEach(modalId => {
+          const modal = document.getElementById(modalId);
+          if (!modal) return;
+          
+          const content = modal.querySelector('.theater-modal-content');
+          if (!content) return;
+          
+          // 应用拖动样式
+          modal.classList.add('dragging');
+          modal.style.display = 'block';
+          modal.style.justifyContent = 'unset';
+          modal.style.alignItems = 'unset';
+          modal.style.position = 'fixed';
+          modal.style.left = '0';
+          modal.style.top = '0';
+          modal.style.width = '100vw';
+          modal.style.height = '100vh';
+          
+          content.style.position = 'fixed';
+          content.style.left = this.x + 'px';
+          content.style.top = this.y + 'px';
+          content.style.margin = '0';
+          content.style.transform = 'none';
+          content.style.zIndex = '999999';
+          
+          console.log(`[全局位置] 应用位置到 ${modalId}:`, { x: this.x, y: this.y });
+        });
+      },
+      
+      // 重置所有模态框到居中
+      resetAllModals() {
+        const modalIds = [
+          'theater-generator-modal',
+          'api-settings-modal',
+          'diary-module-modal',
+          'theater-module-modal',
+          'wallpaper-module-modal',
+          'chat-module-modal'
+        ];
+        
+        modalIds.forEach(modalId => {
+          const modal = document.getElementById(modalId);
+          if (!modal) return;
+          
+          const content = modal.querySelector('.theater-modal-content');
+          if (!content) return;
+          
+          // 重置为居中布局
+          modal.style.display = 'flex';
+          modal.style.justifyContent = 'center';
+          modal.style.alignItems = 'center';
+          modal.style.position = 'fixed';
+          modal.style.left = '0';
+          modal.style.top = '0';
+          modal.style.width = '100vw';
+          modal.style.height = '100vh';
+          
+          content.style.position = 'relative';
+          content.style.left = 'auto';
+          content.style.top = 'auto';
+          content.style.margin = '0';
+          
+          modal.classList.remove('dragging');
+        });
+        
+        // 清除全局位置
+        this.x = null;
+        this.y = null;
+        localStorage.removeItem('theater_global_position');
+        console.log('[全局位置] 重置所有模态框');
+      }
+    };
+
+    // 初始化全局位置管理器
+    window.GlobalModalPosition.loadPosition();
+
+    // 手动启用所有模态框的拖动功能
+    window.enableAllDragFunctions = function() {
+      console.log('[拖动功能] 手动启用所有拖动功能...');
+      
+      const modalSelectors = [
+        { modal: 'theater-generator-modal', header: 'theater-generator-header' },
+        { modal: 'chat-module-modal', header: 'chat-module-header' },
+        { modal: 'api-settings-modal', header: 'api-modal-header' },
+        { modal: 'diary-module-modal', header: 'diary-modal-header' },
+        { modal: 'theater-module-modal', header: 'theater-modal-header' },
+        { modal: 'wallpaper-module-modal', header: 'wallpaper-modal-header' }
+      ];
+      
+      modalSelectors.forEach(({ modal, header }) => {
+        const modalElement = document.getElementById(modal);
+        const headerElement = document.getElementById(header);
+        
+        if (modalElement && headerElement) {
+          window.enableModalDrag(modal, header);
+          console.log(`[拖动功能] ✅ 已为 ${modal} 启用拖动功能`);
+        } else {
+          console.log(`[拖动功能] ⚠️ ${modal} 元素未找到`);
+        }
+      });
+    };
+
+    // 添加拖动功能
+    window.enableModalDrag = function(modalId, headerId) {
+      const modal = document.getElementById(modalId);
+      const header = document.getElementById(headerId);
+      
+      console.log(`[拖动功能] 尝试启用 ${modalId} 的拖动功能:`, {
+        modal: modal ? '存在' : '不存在',
+        header: header ? '存在' : '不存在'
+      });
+      
+      if (!modal || !header) {
+        console.warn(`[拖动功能] 无法找到元素: modal=${modalId}, header=${headerId}`);
+        return;
+      }
+      
+      let isDragging = false;
+      let offsetX, offsetY;  // 改名：鼠标相对于容器的偏移量
+      
+      // 鼠标按下事件 - 修复位置计算版本
+      header.addEventListener('mousedown', (e) => {
+        console.log('[拖动功能] 鼠标按下事件触发', e.target);
+        
+        // 如果点击的是按钮，不启动拖动
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+          console.log('[拖动功能] 点击了按钮，不启动拖动');
+          return;
+        }
+        
+        console.log('[拖动功能] 开始拖动');
+        isDragging = true;
+        
+        // 🔑 关键：找到实际的内容容器
+        const content = modal.querySelector('.theater-modal-content');
+        if (!content) {
+          console.error('[拖动功能] 找不到内容容器');
+          isDragging = false;
+          return;
+        }
+        
+        // 获取内容容器的当前位置
+        const rect = content.getBoundingClientRect();
+        
+        // 🔑 关键修复：计算相对于视口左上角的偏移，考虑页面滚动
+        offsetX = e.clientX - rect.left + window.scrollX;
+        offsetY = e.clientY - rect.top + window.scrollY;
+        
+        console.log('[拖动功能] 初始数据:', { 
+          鼠标X: e.clientX,
+          鼠标Y: e.clientY,
+          容器Left: rect.left,
+          容器Top: rect.top,
+          偏移X: offsetX,
+          偏移Y: offsetY
+        });
+        
+        // 🔑 关键：禁用父容器的flex布局
+        modal.style.display = 'block';
+        modal.style.justifyContent = 'unset';
+        modal.style.alignItems = 'unset';
+        
+        // 将内容容器改为fixed定位（保持当前位置不变）
+        content.style.position = 'fixed';
+        content.style.left = rect.left + 'px';
+        content.style.top = rect.top + 'px';
+        content.style.margin = '0';
+        content.style.zIndex = '999999';
+        
+        // 添加拖动类
+        modal.classList.add('dragging');
+        header.classList.add('dragging');
+        header.style.cursor = 'grabbing';
+        
+        console.log('[拖动功能] 样式设置完成');
+        
+        e.preventDefault();
+      });
+      
+      // 鼠标移动事件 - 修复位置计算
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        // 获取内容容器
+        const content = modal.querySelector('.theater-modal-content');
+        if (!content) return;
+        
+        // 🔑 关键修复：计算绝对位置，考虑页面滚动
+        let newX = e.clientX - offsetX + window.scrollX;
+        let newY = e.clientY - offsetY + window.scrollY;
+        
+        // 限制在视窗范围内
+        const contentWidth = content.offsetWidth;
+        const contentHeight = content.offsetHeight;
+        const maxX = window.innerWidth - contentWidth;
+        const maxY = window.innerHeight - contentHeight;
+        
+        // 边界限制
+        newX = Math.max(0, Math.min(newX, maxX));
+        newY = Math.max(0, Math.min(newY, maxY));
+        
+        // 直接设置内容容器位置
+        content.style.left = newX + 'px';
+        content.style.top = newY + 'px';
+        
+        // 🔑 关键修复：使用简化的全局位置系统
+        console.log(`[拖动调试] 保存全局位置:`, { x: newX, y: newY });
+        window.GlobalModalPosition.savePosition(newX, newY);
+        window.GlobalModalPosition.applyToAllModals();
+        
+        // 详细日志（可选，正式版可删除）
+        console.log('[拖动功能] 拖动中:', { 
+          鼠标X: e.clientX,
+          鼠标Y: e.clientY,
+          偏移X: offsetX,
+          偏移Y: offsetY,
+          新位置X: newX, 
+          新位置Y: newY
+        });
+        
+        e.preventDefault();
+      });
+      
+      // 鼠标释放事件
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
+          console.log('[拖动功能] 拖动结束');
+          isDragging = false;
+          header.style.cursor = 'move';
+          
+          // 移除拖动类（但保持拖动后的位置）
+          // 注意：不要移除 modal 的 dragging 类，否则会恢复flex布局
+          header.classList.remove('dragging');
+          
+          console.log('[拖动功能] 拖动完成，模态框保持在当前位置');
+        }
+      });
+      
+      // 双击重置到居中位置
+      header.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        console.log('[拖动功能] 双击重置位置');
+        
+        // 🔑 关键修复：使用简化的全局位置系统重置
+        window.GlobalModalPosition.resetAllModals();
+        
+        console.log('[拖动功能] 重置完成，恢复居中布局');
+      });
+      
+      // 触摸事件支持（移动端）
+      header.addEventListener('touchstart', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+          return;
+        }
+        
+        isDragging = true;
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+        
+        const rect = modal.getBoundingClientRect();
+        initialX = rect.left;
+        initialY = rect.top;
+        
+        // 先添加CSS类来覆盖居中样式
+        modal.classList.add('dragging');
+        header.classList.add('dragging');
+        
+        // 强制设置样式，使用最高优先级
+        modal.style.setProperty('position', 'fixed', 'important');
+        modal.style.setProperty('left', initialX + 'px', 'important');
+        modal.style.setProperty('top', initialY + 'px', 'important');
+        modal.style.setProperty('margin', '0', 'important');
+        modal.style.setProperty('transform', 'none', 'important');
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('justify-content', 'flex-start', 'important');
+        modal.style.setProperty('align-items', 'flex-start', 'important');
+        modal.style.setProperty('width', 'auto', 'important');
+        modal.style.setProperty('height', 'auto', 'important');
+        header.style.cursor = 'grabbing';
+        
+        e.preventDefault();
+      });
+      
+      document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - startX;
+        const deltaY = touch.clientY - startY;
+        
+        const newX = initialX + deltaX;
+        const newY = initialY + deltaY;
+        
+        const maxX = window.innerWidth - modal.offsetWidth;
+        const maxY = window.innerHeight - modal.offsetHeight;
+        
+        modal.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+        modal.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+        
+        e.preventDefault();
+      });
+      
+      document.addEventListener('touchend', () => {
+        if (isDragging) {
+          isDragging = false;
+          header.style.cursor = 'move';
+          
+          // 移除拖动视觉反馈
+          modal.classList.remove('dragging');
+          header.classList.remove('dragging');
+        }
+      });
+    };
+
+    // 自动为所有模态框启用拖动功能
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) { // 元素节点
+            // 检查是否是模态框
+            const modalSelectors = [
+              { modal: 'theater-generator-modal', header: 'theater-generator-header' },
+              { modal: 'api-settings-modal', header: 'api-modal-header' },
+              { modal: 'diary-module-modal', header: 'diary-modal-header' },
+              { modal: 'theater-module-modal', header: 'theater-modal-header' },
+              { modal: 'wallpaper-module-modal', header: 'wallpaper-modal-header' },
+              { modal: 'chat-module-modal', header: 'chat-module-header' }
+            ];
+            
+            modalSelectors.forEach(({ modal, header }) => {
+              if (node.id === modal || node.querySelector && node.querySelector(`#${modal}`)) {
+                setTimeout(() => {
+                  const modalElement = document.getElementById(modal);
+                  const headerElement = document.getElementById(header);
+                  if (modalElement && headerElement) {
+                    window.enableModalDrag(modal, header);
+                    console.log(`[拖动功能] 已为 ${modal} 启用拖动功能`);
+                  }
+                }, 100);
+              }
+            });
+          }
+        });
+      });
+    });
+    
+    // 开始观察DOM变化
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // 手动启用所有模态框的拖动功能
+    window.enableAllModalDrag = function() {
+      const modalSelectors = [
+        { modal: 'theater-generator-modal', header: 'theater-generator-header' },
+        { modal: 'api-settings-modal', header: 'api-modal-header' },
+        { modal: 'diary-module-modal', header: 'diary-modal-header' },
+        { modal: 'theater-module-modal', header: 'theater-modal-header' },
+        { modal: 'wallpaper-module-modal', header: 'wallpaper-modal-header' },
+        { modal: 'chat-module-modal', header: 'chat-module-header' }
+      ];
+      
+      modalSelectors.forEach(({ modal, header }) => {
+        const modalElement = document.getElementById(modal);
+        const headerElement = document.getElementById(header);
+        if (modalElement && headerElement) {
+          window.enableModalDrag(modal, header);
+          console.log(`[拖动功能] 手动为 ${modal} 启用拖动功能`);
+        }
+      });
+    };
+
+    // 页面加载完成后尝试启用拖动功能
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          window.enableAllModalDrag();
+        }, 1000);
+      });
+    } else {
+      setTimeout(() => {
+        window.enableAllModalDrag();
+      }, 1000);
+    }
+
+    // 调试拖动功能状态
+    window.debugDragStatus = function() {
+        console.group('🔧 [拖动功能] 详细状态检查');
+        
+        const modalSelectors = [
+            { modal: 'theater-generator-modal', header: 'theater-generator-header', name: '主界面' },
+            { modal: 'api-settings-modal', header: 'api-modal-header', name: 'API设置' },
+            { modal: 'chat-module-modal', header: 'chat-module-header', name: '小火聊天' },
+            { modal: 'diary-module-modal', header: 'diary-modal-header', name: '日记模块' },
+            { modal: 'theater-module-modal', header: 'theater-modal-header', name: '小剧场模块' },
+            { modal: 'wallpaper-module-modal', header: 'wallpaper-modal-header', name: '壁纸模块' }
+        ];
+        
+        modalSelectors.forEach(({ modal, header, name }) => {
+            const modalElement = document.getElementById(modal);
+            const headerElement = document.getElementById(header);
+            
+            console.log(`\n📋 ${name} (${modal}):`);
+            console.log(`  模态框存在: ${modalElement ? '✅' : '❌'}`);
+            console.log(`  头部存在: ${headerElement ? '✅' : '❌'}`);
+            
+            if (headerElement) {
+                console.log(`  头部样式:`, {
+                    cursor: headerElement.style.cursor,
+                    userSelect: headerElement.style.userSelect,
+                    position: headerElement.style.position
+                });
+                
+                // 检查是否有拖动事件监听器
+                const hasMouseDown = headerElement.onmousedown !== null;
+                console.log(`  有mousedown事件: ${hasMouseDown ? '✅' : '❌'}`);
+                
+                // 检查是否有按钮
+                const buttons = headerElement.querySelectorAll('button');
+                console.log(`  按钮数量: ${buttons.length}`);
+                buttons.forEach((btn, index) => {
+                    console.log(`    按钮${index + 1}: ${btn.id || btn.className || btn.textContent.trim()}`);
+                });
+            }
+            
+            if (modalElement) {
+                const content = modalElement.querySelector('.theater-modal-content');
+                console.log(`  内容容器存在: ${content ? '✅' : '❌'}`);
+                if (content) {
+                    console.log(`  内容容器样式:`, {
+                        position: content.style.position,
+                        left: content.style.left,
+                        top: content.style.top,
+                        zIndex: content.style.zIndex
+                    });
+                }
+            }
+        });
+        
+        console.log(`\n🔧 ModalPositionManager状态:`);
+        console.log(`  存在: ${window.ModalPositionManager ? '✅' : '❌'}`);
+        if (window.ModalPositionManager) {
+            console.log(`  全局位置:`, window.ModalPositionManager.globalPosition);
+            console.log(`  保存的位置数量:`, window.ModalPositionManager.positions.size);
+        }
+        
+        console.log(`\n🔧 enableModalDrag函数:`);
+        console.log(`  存在: ${window.enableModalDrag ? '✅' : '❌'}`);
+        
+        console.groupEnd();
+    };
+
+    // 测试拖动功能
+    window.testDragFunction = function() {
+      console.log('[拖动功能测试] 开始测试拖动功能...');
+      
+      // 检查是否有模态框存在
+      const modals = document.querySelectorAll('.theater-modal');
+      console.log(`[拖动功能测试] 找到 ${modals.length} 个模态框`);
+      
+      modals.forEach((modal, index) => {
+        const header = modal.querySelector('.theater-modal-header');
+        if (header) {
+          console.log(`[拖动功能测试] 模态框 ${index + 1}:`, {
+            id: modal.id,
+            hasDraggingClass: modal.classList.contains('dragging'),
+            position: modal.style.position,
+            left: modal.style.left,
+            top: modal.style.top,
+            justifyContent: modal.style.justifyContent,
+            alignItems: modal.style.alignItems
+          });
+        }
+      });
+    };
+
+    // 实时监控拖动状态
+    window.monitorDragState = function() {
+      const modals = document.querySelectorAll('.theater-modal');
+      modals.forEach(modal => {
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+              console.log('[拖动监控] 样式变化:', {
+                id: modal.id,
+                position: modal.style.position,
+                left: modal.style.left,
+                top: modal.style.top,
+                justifyContent: modal.style.justifyContent,
+                alignItems: modal.style.alignItems,
+                hasDraggingClass: modal.classList.contains('dragging')
+              });
+            }
+          });
+        });
+        
+        observer.observe(modal, {
+          attributes: true,
+          attributeFilter: ['style', 'class']
+        });
+      });
+      
+      console.log('[拖动监控] 开始监控所有模态框的拖动状态');
+    };
+
+    // 强制测试拖动功能
+    window.forceTestDrag = function() {
+      console.log('[强制测试] 开始强制测试拖动功能...');
+      
+      const modals = document.querySelectorAll('.theater-modal');
+      modals.forEach(modal => {
+        if (modal.style.display !== 'none') {
+          console.log(`[强制测试] 测试模态框: ${modal.id}`);
+          
+          // 强制设置拖动样式
+          modal.classList.add('dragging');
+          modal.style.setProperty('position', 'fixed', 'important');
+          modal.style.setProperty('left', '100px', 'important');
+          modal.style.setProperty('top', '100px', 'important');
+          modal.style.setProperty('justify-content', 'flex-start', 'important');
+          modal.style.setProperty('align-items', 'flex-start', 'important');
+          modal.style.setProperty('width', 'auto', 'important');
+          modal.style.setProperty('height', 'auto', 'important');
+          
+          console.log(`[强制测试] 设置后的样式:`, {
+            position: modal.style.position,
+            left: modal.style.left,
+            top: modal.style.top,
+            justifyContent: modal.style.justifyContent,
+            alignItems: modal.style.alignItems,
+            width: modal.style.width,
+            height: modal.style.height
+          });
+        }
+      });
+    };
 
 })();
