@@ -42,6 +42,57 @@
 /* 确保模态框在所有元素之上 */
 .theater-modal {
     z-index: 999999 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+/* 拖动时完全禁用flex布局 */
+.theater-modal.dragging {
+    display: block !important;
+    justify-content: unset !important;
+    align-items: unset !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    transform: none !important;
+}
+
+/* 拖动时内容容器使用fixed定位 */
+.theater-modal.dragging .theater-modal-content {
+    position: fixed !important;
+    margin: 0 !important;
+    z-index: 999999 !important;
+}
+
+/* 确保拖动时模态框位置不受居中样式影响 */
+.theater-modal.dragging[style*="left"] {
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    position: fixed !important;
+}
+
+/* 强制覆盖所有居中样式 */
+.theater-modal.dragging[style*="position: fixed"] {
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+}
+
+/* 最高优先级覆盖 - 拖动时完全禁用居中 */
+.theater-modal.dragging {
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    position: fixed !important;
+    display: flex !important;
+}
+
+/* 确保拖动时模态框内容不会居中 */
+.theater-modal.dragging .theater-modal-content {
+    position: relative !important;
+    margin: 0 !important;
 }
 
 /* 确保内容区域不会被点击穿透 */
@@ -144,6 +195,187 @@
 
 .preview-container.fullscreen > * {
     width: 100% !important;
+}
+
+/* 拖动功能样式 */
+.theater-modal-header {
+    transition: all 0.2s ease;
+    cursor: move;
+    user-select: none;
+}
+
+/* 确保所有模态框头部都有拖动样式 */
+#theater-generator-header,
+#api-modal-header,
+#diary-modal-header,
+#theater-modal-header,
+#wallpaper-modal-header,
+#chat-module-header {
+    transition: all 0.2s ease;
+    cursor: move;
+    user-select: none;
+}
+
+.theater-modal-header:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.theater-modal-header:active {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+
+.theater-modal-header:hover::after {
+    opacity: 0.7;
+}
+
+
+
+#theater-generator-header:hover::after,
+#api-modal-header:hover::after,
+#diary-modal-header:hover::after,
+#theater-modal-header:hover::after,
+#wallpaper-modal-header:hover::after,
+#chat-module-header:hover::after {
+    opacity: 0.7;
+}
+
+/* 拖动时的样式 */
+.theater-modal.dragging {
+    transition: none !important;
+    z-index: 10001 !important;
+    justify-content: unset !important;
+    align-items: unset !important;
+    opacity: 1 !important;
+}
+
+.theater-modal.dragging .theater-modal-content {
+    position: fixed !important;
+    margin: 0 !important;
+    transform: none !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+    opacity: 1 !important;
+    transition: none !important;
+}
+
+/* 拖动指示器 */
+.theater-modal-header::before {
+    content: '⋮⋮';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    color: #999;
+    font-size: 12px;
+    letter-spacing: 2px;
+    pointer-events: none;
+}
+
+.theater-modal-header:hover::before {
+    opacity: 0.3;
+}
+
+/* 为所有模态框头部添加拖动指示器 */
+#theater-generator-header::before,
+#api-modal-header::before,
+#diary-modal-header::before,
+#theater-modal-header::before,
+#wallpaper-modal-header::before,
+#chat-module-header::before {
+    content: '⋮⋮';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    color: #999;
+    font-size: 12px;
+    letter-spacing: 2px;
+    pointer-events: none;
+}
+
+#theater-generator-header:hover::before,
+#api-modal-header:hover::before,
+#diary-modal-header:hover::before,
+#theater-modal-header:hover::before,
+#wallpaper-modal-header:hover::before,
+#chat-module-header:hover::before {
+    opacity: 0.3;
+}
+
+/* 移动端拖动优化 */
+@media (max-width: 768px) {
+    .theater-modal-header {
+        padding: 15px 20px;
+        min-height: 50px;
+    }
+    
+    .theater-modal-header::before {
+        font-size: 14px;
+        letter-spacing: 3px;
+    }
+}
+
+/* 拖动时的视觉反馈 */
+.theater-modal-header.dragging {
+    background-color: rgba(74, 144, 226, 0.1) !important;
+    border-bottom: 2px solid #4a90e2 !important;
+}
+
+.theater-modal-header.dragging::before {
+    opacity: 0.6;
+    color: #4a90e2;
+}
+
+/* 为所有模态框头部添加拖动时的视觉反馈 */
+#theater-generator-header.dragging,
+#api-modal-header.dragging,
+#diary-modal-header.dragging,
+#theater-modal-header.dragging,
+#wallpaper-modal-header.dragging,
+#chat-module-header.dragging {
+    background-color: rgba(74, 144, 226, 0.1) !important;
+    border-bottom: 2px solid #4a90e2 !important;
+}
+
+#theater-generator-header.dragging::before,
+#api-modal-header.dragging::before,
+#diary-modal-header.dragging::before,
+#theater-modal-header.dragging::before,
+#wallpaper-modal-header.dragging::before,
+#chat-module-header.dragging::before {
+    opacity: 0.6;
+    color: #4a90e2;
+}
+
+/* 确保所有模态框在拖动时保持一致性 */
+#theater-generator-modal.dragging,
+#api-settings-modal.dragging,
+#diary-module-modal.dragging,
+#theater-module-modal.dragging,
+#wallpaper-module-modal.dragging,
+#chat-module-modal.dragging {
+    transition: none !important;
+    opacity: 1 !important;
+    justify-content: unset !important;
+    align-items: unset !important;
+}
+
+#theater-generator-modal.dragging .theater-modal-content,
+#api-settings-modal.dragging .theater-modal-content,
+#diary-module-modal.dragging .theater-modal-content,
+#theater-module-modal.dragging .theater-modal-content,
+#wallpaper-module-modal.dragging .theater-modal-content,
+#chat-module-modal.dragging .theater-modal-content {
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    margin: 0 !important;
+    position: fixed !important;
+}
     height: 100% !important;
     overflow: auto !important;
 }
@@ -190,6 +422,11 @@
         height: 100% !important;
         overflow: auto !important;
     }
+    
+       .tg-modal-content {
+        margin-top: 0px; 
+    }
+    
 }
 
 
